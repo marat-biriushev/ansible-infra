@@ -1,0 +1,6 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Called by keepalived on every VRRP state transition:
+#   $1 = INSTANCE|GROUP, $2 = name, $3 = MASTER|BACKUP|FAULT
+logger -t keepalived-notify "VRRP $1 $2 -> $3 on $(hostname -s)"
+exit 0

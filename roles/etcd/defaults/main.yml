@@ -1,0 +1,31 @@
+---
+etcd_version: "3.5.17"
+etcd_arch: amd64
+etcd_download_base_url: "https://github.com/etcd-io/etcd/releases/download"
+etcd_download_url: >-
+  {{ etcd_download_base_url }}/v{{ etcd_version }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz
+etcd_download_dir: /tmp
+etcd_bin_dir: /usr/local/bin
+
+etcd_user: etcd
+etcd_group: etcd
+etcd_data_dir: /var/lib/etcd
+etcd_conf_dir: /etc/etcd
+
+etcd_cluster_name: etcd-cluster
+etcd_initial_cluster_token: etcd-cluster-token
+etcd_client_port: 2379
+etcd_peer_port: 2380
+
+etcd_heartbeat_interval: 250
+etcd_election_timeout: 2500
+etcd_snapshot_count: 10000
+etcd_auto_compaction_mode: revision
+etcd_auto_compaction_retention: "1000"
+etcd_quota_backend_bytes: 4294967296
+etcd_max_request_bytes: 10485760
+etcd_log_level: info
+
+# Hosts that form the etcd cluster
+etcd_group_name: etcd
+etcd_node_ip: "{{ ansible_host | default(ansible_default_ipv4.address) }}"

@@ -1,0 +1,120 @@
+---
+# ===================================================================
+# Deploy a Patroni {{ patroni_version }} HA cluster
+#   3 x DB node : etcd + PostgreSQL 18 + Patroni
+#   2 x LB node : HAProxy + keepalived (VIP)
+#
+#   ansible-playbook -i inventories/test playbooks/patroni_cluster.yml
+# ===================================================================
+
+- name: Preflight checks
+  hosts: pg_cluster
+  gather_facts: true
+  tags: [always, preflight]
+  tasks:
+    - name: Assert that the cluster topology matches the expected layout
+      ansible.builtin.assert:
+        that:
+          - groups['patroni'] | length >= 3
+          - groups['etcd'] | length is odd
+          - groups['haproxy'] | length >= 2
+          - groups['keepalived'] | length >= 2
+        fail_msg: >-
+          Expected at least 3 Patroni nodes, an odd number of etcd members and
+          2 load balancers; got
+          patroni={{ groups['patroni'] | length }},
+          etcd={{ groups['etcd'] | length }},
+          haproxy={{ groups['haproxy'] | length }}.
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+    - name: Assert that the vault variables are available
+      ansible.builtin.assert:
+        that:
+          - postgresql_superuser_password | default('', true) | length > 0
+          - postgresql_replication_password | default('', true) | length > 0
+          - patroni_restapi_password | default('', true) | length > 0
+        fail_msg: >-
+          Cluster credentials are missing. Copy
+          inventories/{{ env_name }}/group_vars/all/vault.yml.example to vault.yml,
+          fill it in and encrypt it with ansible-vault.
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+    - name: Assert that exactly one keepalived node is configured as MASTER
+      ansible.builtin.assert:
+        that:
+          - (groups['keepalived'] | map('extract', hostvars, 'keepalived_state') | select('equalto', 'MASTER') | list | length) == 1
+        fail_msg: "Exactly one keepalived node must have keepalived_state: MASTER"
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+- name: OS baseline
+  hosts: pg_cluster
+  gather_facts: true
+  tags: [common]
+  roles:
+    - role: common
+
+- name: Etcd cluster (Patroni DCS)
+  hosts: etcd
+  gather_facts: true
+  any_errors_fatal: true
+  tags: [etcd]
+  roles:
+    - role: etcd
+
+- name: PostgreSQL binaries
+  hosts: patroni
+  gather_facts: true
+  any_errors_fatal: true
+  tags: [postgresql]
+  roles:
+    - role: postgresql
+
+- name: Patroni cluster
+  hosts: patroni
+  gather_facts: true
+  any_errors_fatal: true
+  tags: [patroni]
+  roles:
+    - role: patroni
+
+- name: Connection routing layer
+  hosts: haproxy
+  gather_facts: true
+  tags: [haproxy, keepalived]
+  roles:
+    - role: haproxy
+      tags: [haproxy]
+    - role: keepalived
+      tags: [keepalived]
+
+- name: Post-deployment summary
+  hosts: patroni[0]
+  gather_facts: false
+  tags: [always, summary]
+  tasks:
+    - name: Read the cluster state
+      ansible.builtin.command: >-
+        {{ patroni_bin_dir | default('/opt/patroni/bin') }}/patronictl
+        -c {{ patroni_config_file | default('/etc/patroni/patroni.yml') }} list
+      register: patroni_list
+      changed_when: false
+
+    - name: Show the cluster state and the connection endpoints
+      ansible.builtin.debug:
+        msg: |
+          {{ patroni_list.stdout }}
+
+          read/write : postgresql://{{ keepalived_vip | regex_replace('/.*$', '') }}:{{ haproxy_primary_port }}/postgres
+          read-only  : postgresql://{{ keepalived_vip | regex_replace('/.*$', '') }}:{{ haproxy_replica_port }}/postgres
+          haproxy stats: http://{{ keepalived_vip | regex_replace('/.*$', '') }}:{{ haproxy_stats_port }}/stats
+      vars:
+        keepalived_vip: "{{ hostvars[groups['keepalived'][0]].keepalived_vip }}"
+        haproxy_primary_port: "{{ hostvars[groups['haproxy'][0]].haproxy_primary_port }}"
+        haproxy_replica_port: "{{ hostvars[groups['haproxy'][0]].haproxy_replica_port }}"
+        haproxy_stats_port: "{{ hostvars[groups['haproxy'][0]].haproxy_stats_port }}"

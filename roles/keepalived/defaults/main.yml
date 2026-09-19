@@ -1,0 +1,19 @@
+---
+keepalived_vip: 10.0.0.100/24
+keepalived_interface: eth0
+keepalived_virtual_router_id: 51
+keepalived_advert_int: 1
+keepalived_state: BACKUP          # per-host override, MASTER on the preferred node
+keepalived_priority: 100          # per-host override
+keepalived_auth_type: PASS
+keepalived_auth_pass: "changeme"  # VRRP password, 8 characters max
+keepalived_router_id: "{{ inventory_hostname }}"
+keepalived_group_name: keepalived
+keepalived_track_process: haproxy
+keepalived_check_interval: 2
+keepalived_check_fall: 2
+keepalived_check_rise: 2
+keepalived_check_weight: 20
+keepalived_use_unicast: true
+keepalived_node_ip: "{{ ansible_host | default(ansible_default_ipv4.address) }}"
+keepalived_notify_script: /usr/local/bin/keepalived-notify.sh

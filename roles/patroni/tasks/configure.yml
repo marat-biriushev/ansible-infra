@@ -1,0 +1,54 @@
+---
+- name: Create the Patroni directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ item.group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ patroni_conf_dir }}", owner: root, group: "{{ postgresql_group }}", mode: "0750"}
+    - {path: "{{ patroni_log_dir }}", owner: "{{ postgresql_user }}", group: "{{ postgresql_group }}", mode: "0750"}
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Deploy the Patroni configuration
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: "{{ patroni_config_file }}"
+    owner: "{{ postgresql_user }}"
+    group: "{{ postgresql_group }}"
+    mode: "0640"
+    validate: "{{ patroni_bin_dir }}/patroni --validate-config %s"
+  notify: Reload patroni
+
+- name: Deploy the Patroni systemd unit
+  ansible.builtin.template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart patroni
+
+- name: Deploy the patronictl shell profile
+  ansible.builtin.copy:
+    dest: /etc/profile.d/patronictl.sh
+    content: |
+      # {{ ansible_managed }}
+      export PATRONICTL_CONFIG_FILE={{ patroni_config_file }}
+      export PATH={{ patroni_bin_dir }}:{{ postgresql_bin_dir }}:$PATH
+    owner: root
+    group: root
+    mode: "0644"
+  when: patroni_manage_patronictl_profile | bool
+
+- name: Deploy the .pgpass file for the postgres user
+  ansible.builtin.template:
+    src: pgpass.j2
+    dest: "{{ postgresql_data_dir | dirname }}/.pgpass"
+    owner: "{{ postgresql_user }}"
+    group: "{{ postgresql_group }}"
+    mode: "0600"

@@ -1,0 +1,112 @@
+# {{ ansible_managed }}
+# Patroni {{ patroni_version }} / PostgreSQL {{ postgresql_version }} - cluster "{{ patroni_scope }}"
+scope: {{ patroni_scope }}
+namespace: {{ patroni_namespace }}
+name: {{ patroni_node_name }}
+
+log:
+  level: {{ patroni_log_level }}
+  dir: {{ patroni_log_dir }}
+  file_num: {{ patroni_log_file_num }}
+  file_size: {{ patroni_log_file_size }}
+
+restapi:
+  listen: {{ patroni_restapi_listen }}:{{ patroni_restapi_port }}
+  connect_address: {{ patroni_node_ip }}:{{ patroni_restapi_port }}
+  authentication:
+    username: {{ patroni_restapi_username }}
+    password: "{{ patroni_restapi_password }}"
+
+etcd3:
+  protocol: {{ patroni_etcd_protocol }}
+  hosts:
+{% if patroni_etcd_hosts | length > 0 %}
+{% for endpoint in patroni_etcd_hosts %}
+    - {{ endpoint }}
+{% endfor %}
+{% else %}
+{% for host in groups[patroni_etcd_group_name] %}
+    - {{ hostvars[host].ansible_host | default(hostvars[host].ansible_default_ipv4.address) }}:{{ patroni_etcd_port }}
+{% endfor %}
+{% endif %}
+
+# The bootstrap section is only used when the cluster is created for the
+# first time. Afterwards the DCS holds the authoritative configuration
+# (change it with: patronictl edit-config {{ patroni_scope }}).
+bootstrap:
+  dcs:
+{% for key, value in patroni_dcs.items() %}
+    {{ key }}: {{ value | lower if value is boolean else value }}
+{% endfor %}
+    postgresql:
+      use_pg_rewind: {{ patroni_use_pg_rewind | lower }}
+      use_slots: {{ patroni_use_slots | lower }}
+      parameters:
+{% for key, value in patroni_postgresql_parameters.items() %}
+        {{ key }}: "{{ value }}"
+{% endfor %}
+
+  initdb:
+{% for option in patroni_initdb_options %}
+{% if option is mapping %}
+{% for key, value in option.items() %}
+    - {{ key }}: {{ value }}
+{% endfor %}
+{% else %}
+    - {{ option }}
+{% endif %}
+{% endfor %}
+
+  pg_hba:
+    - local   all             all                                     peer
+    - host    all             all             127.0.0.1/32            scram-sha-256
+    - host    all             all             ::1/128                 scram-sha-256
+{% for network in trusted_networks %}
+    - host    all             all             {{ "%-23s" | format(network) }} scram-sha-256
+{% endfor %}
+{% for host in groups[patroni_group_name] %}
+    - host    replication     {{ postgresql_replication_user }}   {{ "%-23s" | format(hostvars[host].ansible_host | default(hostvars[host].ansible_default_ipv4.address) ~ '/32') }} scram-sha-256
+{% endfor %}
+
+postgresql:
+  listen: 0.0.0.0:{{ postgresql_port }}
+  connect_address: {{ patroni_node_ip }}:{{ postgresql_port }}
+  data_dir: {{ postgresql_data_dir }}
+  bin_dir: {{ postgresql_bin_dir }}
+  config_dir: {{ postgresql_data_dir }}
+  pgpass: {{ postgresql_data_dir | dirname }}/.pgpass_patroni
+
+  authentication:
+    superuser:
+      username: {{ postgresql_superuser }}
+      password: "{{ postgresql_superuser_password }}"
+    replication:
+      username: {{ postgresql_replication_user }}
+      password: "{{ postgresql_replication_password }}"
+    rewind:
+      username: {{ postgresql_rewind_user }}
+      password: "{{ postgresql_rewind_password }}"
+
+  parameters:
+    unix_socket_directories: /var/run/postgresql
+    logging_collector: "on"
+    log_directory: {{ postgresql_log_dir | default('/var/log/postgresql') }}
+    log_filename: "postgresql-%a.log"
+    log_rotation_age: 1d
+    log_truncate_on_rotation: "on"
+
+  create_replica_methods:
+    - basebackup
+  basebackup:
+    max-rate: 100M
+    checkpoint: fast
+
+tags:
+{% for key, value in patroni_tags.items() %}
+  {{ key }}: {{ value | lower if value is boolean else value }}
+{% endfor %}
+
+watchdog:
+  mode: "{{ patroni_watchdog_mode }}"
+  device: /dev/watchdog
+  safety_margin: 5

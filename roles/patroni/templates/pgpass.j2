@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+*:{{ postgresql_port }}:*:{{ postgresql_superuser }}:{{ postgresql_superuser_password }}
+*:{{ postgresql_port }}:replication:{{ postgresql_replication_user }}:{{ postgresql_replication_password }}
+*:{{ postgresql_port }}:*:{{ postgresql_rewind_user }}:{{ postgresql_rewind_password }}

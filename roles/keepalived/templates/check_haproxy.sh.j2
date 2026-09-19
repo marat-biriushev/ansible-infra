@@ -1,0 +1,7 @@
+#!/bin/sh
+# {{ ansible_managed }}
+# Exit 0 while the local HAProxy is able to serve traffic.
+if ! /bin/systemctl is-active --quiet {{ keepalived_track_process }}; then
+    exit 1
+fi
+exit 0

@@ -1,0 +1,105 @@
+---
+# --- installation ----------------------------------------------------
+patroni_version: "4.1.*"          # any 4.1.x release
+patroni_install_method: pip       # pip (virtualenv) is the only method here
+patroni_venv_dir: /opt/patroni
+patroni_bin_dir: "{{ patroni_venv_dir }}/bin"
+patroni_pip_packages:
+  - "patroni[etcd3]=={{ patroni_version }}"
+  - "psycopg[binary]"
+  - python-dateutil
+  - ydiff
+
+patroni_conf_dir: /etc/patroni
+patroni_config_file: "{{ patroni_conf_dir }}/patroni.yml"
+patroni_log_dir: /var/log/patroni
+patroni_log_level: INFO
+patroni_log_file_num: 7
+patroni_log_file_size: 26214400
+
+# --- cluster ---------------------------------------------------------
+patroni_scope: pg-cluster
+patroni_namespace: /service
+patroni_node_name: "{{ inventory_hostname }}"
+patroni_group_name: patroni
+patroni_node_ip: "{{ ansible_host | default(ansible_default_ipv4.address) }}"
+patroni_bootstrap_host: "{{ groups[patroni_group_name][0] }}"
+
+# --- REST API --------------------------------------------------------
+patroni_restapi_port: 8008
+patroni_restapi_listen: "0.0.0.0"
+patroni_restapi_username: patroni
+patroni_restapi_password: "changeme"
+
+# --- DCS (etcd v3) ---------------------------------------------------
+patroni_etcd_group_name: etcd
+patroni_etcd_port: 2379
+patroni_etcd_protocol: http
+# The endpoint list is built from groups[patroni_etcd_group_name] in the
+# template; override patroni_etcd_hosts to point at an external etcd cluster.
+patroni_etcd_hosts: []
+
+# --- DCS level settings ----------------------------------------------
+patroni_dcs:
+  ttl: 30
+  loop_wait: 10
+  retry_timeout: 10
+  maximum_lag_on_failover: 1048576
+  synchronous_mode: false
+
+patroni_use_pg_rewind: true
+patroni_use_slots: true
+
+# --- PostgreSQL ------------------------------------------------------
+postgresql_version: 18
+postgresql_port: 5432
+postgresql_user: postgres
+postgresql_group: postgres
+postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/data"
+postgresql_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+postgresql_encoding: UTF8
+postgresql_locale: en_US.UTF-8
+
+postgresql_superuser: postgres
+postgresql_superuser_password: "changeme"
+postgresql_replication_user: replicator
+postgresql_replication_password: "changeme"
+postgresql_rewind_user: rewind_user
+postgresql_rewind_password: "changeme"
+
+patroni_postgresql_parameters:
+  max_connections: 200
+  shared_buffers: 1GB
+  wal_level: replica
+  hot_standby: "on"
+  wal_log_hints: "on"
+
+patroni_initdb_options:
+  - encoding: "{{ postgresql_encoding }}"
+  - locale: "{{ postgresql_locale }}"
+  - data-checksums
+
+# Networks allowed to connect (host-based authentication)
+trusted_networks:
+  - 10.0.0.0/8
+
+# --- node behaviour --------------------------------------------------
+patroni_tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
+
+# /dev/watchdog is usually absent in virtual machines; switch to
+# "automatic" once the watchdog device is available on the VMs.
+patroni_watchdog_mode: "off"
+
+# --- safety ----------------------------------------------------------
+# A Patroni restart on the leader triggers a failover, so the handler is
+# disabled by default. Configuration changes are applied with SIGHUP
+# (reload); use playbooks/patroni_rolling_restart.yml for a controlled
+# restart, or run with -e patroni_allow_restart=true.
+patroni_allow_restart: false
+
+# --- convenience -----------------------------------------------------
+patroni_manage_patronictl_profile: true

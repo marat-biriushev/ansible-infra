@@ -1,0 +1,70 @@
+---
+- name: Install the prerequisites for the PGDG repository
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - gnupg
+      - lsb-release
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install the PGDG repository
+  when: postgresql_manage_repository | bool
+  block:
+    - name: Download the PGDG signing key
+      ansible.builtin.get_url:
+        url: "{{ postgresql_pgdg_key_url }}"
+        dest: /usr/share/keyrings/postgresql-pgdg.asc
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Add the PGDG apt repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [signed-by=/usr/share/keyrings/postgresql-pgdg.asc]
+          {{ postgresql_pgdg_repo_url }} {{ ansible_distribution_release }}-pgdg main
+        filename: pgdg
+        state: present
+        update_cache: true
+
+# postgresql-common reads this file during the package install; writing it
+# first keeps the packages from creating (and starting) a "main" cluster
+# that would collide with the cluster Patroni bootstraps.
+- name: Make sure /etc/postgresql-common exists
+  ansible.builtin.file:
+    path: /etc/postgresql-common
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Disable the automatic creation of the "main" cluster
+  ansible.builtin.copy:
+    dest: /etc/postgresql-common/createcluster.conf
+    content: |
+      # {{ ansible_managed }}
+      create_main_cluster = false
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Install the PostgreSQL packages
+  ansible.builtin.apt:
+    name: "{{ postgresql_packages + postgresql_extra_packages }}"
+    state: present
+  register: postgresql_install_result
+  retries: 3
+  delay: 5
+  until: postgresql_install_result is succeeded
+
+- name: Check for an auto-created "main" cluster
+  ansible.builtin.stat:
+    path: "/etc/postgresql/{{ postgresql_version }}/main"
+  register: postgresql_main_cluster
+
+- name: Drop the auto-created "main" cluster
+  ansible.builtin.command: "pg_dropcluster --stop {{ postgresql_version }} main"
+  when: postgresql_main_cluster.stat.exists
+  changed_when: true

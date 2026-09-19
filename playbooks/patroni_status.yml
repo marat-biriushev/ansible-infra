@@ -1,0 +1,22 @@
+---
+# Read-only: show the current cluster topology.
+#   ansible-playbook -i inventories/test playbooks/patroni_status.yml
+- name: Patroni cluster status
+  hosts: patroni[0]
+  gather_facts: false
+  tasks:
+    - name: Read the cluster state
+      ansible.builtin.command: >-
+        {{ patroni_bin_dir }}/patronictl -c {{ patroni_config_file }} list
+      register: patroni_list
+      changed_when: false
+
+    - name: Read the DCS configuration
+      ansible.builtin.command: >-
+        {{ patroni_bin_dir }}/patronictl -c {{ patroni_config_file }} show-config
+      register: patroni_config
+      changed_when: false
+
+    - name: Show the cluster state
+      ansible.builtin.debug:
+        msg: "{{ (patroni_list.stdout ~ '\n\n' ~ patroni_config.stdout).split('\n') }}"

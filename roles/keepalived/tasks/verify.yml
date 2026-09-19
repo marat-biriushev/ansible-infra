@@ -1,0 +1,24 @@
+---
+- name: Give VRRP a moment to converge
+  ansible.builtin.wait_for:
+    timeout: 5
+  delegate_to: localhost
+  become: false
+
+- name: Look for the VIP on every load balancer
+  ansible.builtin.command: "ip -4 -o addr show dev {{ keepalived_interface }}"
+  register: keepalived_ip_addr
+  changed_when: false
+  delegate_to: "{{ item }}"
+  loop: "{{ groups[keepalived_group_name] }}"
+
+- name: Assert that exactly one node holds the VIP
+  ansible.builtin.assert:
+    that:
+      - (keepalived_ip_addr.results | selectattr('stdout', 'search', keepalived_vip | regex_replace('/.*$', '')) | list | length) == 1
+    fail_msg: >-
+      The VIP {{ keepalived_vip }} is held by
+      {{ keepalived_ip_addr.results | selectattr('stdout', 'search', keepalived_vip | regex_replace('/.*$', '')) | map(attribute='item') | list }}
+    success_msg: >-
+      The VIP {{ keepalived_vip }} is held by
+      {{ (keepalived_ip_addr.results | selectattr('stdout', 'search', keepalived_vip | regex_replace('/.*$', '')) | map(attribute='item') | list)[0] }}

@@ -1,0 +1,11 @@
+---
+# etcd is co-located with the database nodes in test
+etcd_cluster_name: "{{ pg_cluster_name }}-etcd"
+etcd_client_port: 2379
+etcd_peer_port: 2380
+etcd_data_dir: /var/lib/etcd
+etcd_initial_cluster_token: "{{ pg_cluster_name }}-etcd-token"
+etcd_heartbeat_interval: 250
+etcd_election_timeout: 2500
+etcd_auto_compaction_retention: "8"
+etcd_quota_backend_bytes: 4294967296    # 4 GiB

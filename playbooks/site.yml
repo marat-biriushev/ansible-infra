@@ -1,0 +1,5 @@
+---
+# Entry point for the whole infrastructure. Add further stacks below as
+# they are onboarded (monitoring, backups, application servers, ...).
+- name: PostgreSQL HA stack (Patroni + etcd + HAProxy + keepalived)
+  ansible.builtin.import_playbook: patroni_cluster.yml

@@ -1,0 +1,46 @@
+---
+# ===================================================================
+# Global variables - TEST environment
+# ===================================================================
+env_name: test
+env_is_production: false
+
+# --- cluster identity ----------------------------------------------
+pg_cluster_name: pg-test          # patroni scope / etcd namespace / haproxy name
+pg_cluster_domain: test.local
+
+# --- OS baseline ----------------------------------------------------
+common_timezone: Etc/UTC
+common_ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+common_manage_hosts_file: true
+common_manage_firewall: false     # no firewalld/ufw management in test
+
+# --- networking -----------------------------------------------------
+# Subnets allowed to reach PostgreSQL / etcd / Patroni REST API
+trusted_networks:
+  - 10.20.10.0/24
+  - 10.20.20.0/24
+
+# Interface used for cluster traffic and for the keepalived VIP
+cluster_interface: eth0
+
+# --- versions (single source of truth) -------------------------------
+postgresql_version: 18
+patroni_version: "4.1.*"
+etcd_version: "3.5.17"
+
+# --- cluster-wide ports -----------------------------------------------
+# Defined for every host: the database nodes listen on them and the load
+# balancers use the same values for their backends and health checks.
+postgresql_port: 5432
+patroni_restapi_port: 8008
+
+# --- credentials (see vault.yml.example) ------------------------------
+postgresql_superuser_password: "{{ vault_postgresql_superuser_password }}"
+postgresql_replication_password: "{{ vault_postgresql_replication_password }}"
+postgresql_rewind_password: "{{ vault_postgresql_rewind_password }}"
+patroni_restapi_password: "{{ vault_patroni_restapi_password }}"
+haproxy_stats_password: "{{ vault_haproxy_stats_password }}"
+keepalived_auth_pass: "{{ vault_keepalived_auth_pass }}"

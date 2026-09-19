@@ -1,0 +1,37 @@
+---
+# Controlled restart of the whole cluster: replicas first, the leader last
+# via a switchover, so the read/write endpoint moves only once.
+#   ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
+- name: Rolling restart of the Patroni cluster
+  hosts: patroni
+  gather_facts: false
+  serial: 1
+  tasks:
+    - name: Read the local Patroni role
+      ansible.builtin.uri:
+        url: "http://{{ patroni_node_ip }}:{{ patroni_restapi_port }}/patroni"
+        return_content: true
+      register: patroni_node_state
+      changed_when: false
+
+    - name: Switch the leader over to another node before restarting it
+      ansible.builtin.command: >-
+        {{ patroni_bin_dir }}/patronictl -c {{ patroni_config_file }}
+        switchover {{ patroni_scope }} --leader {{ patroni_node_name }} --force
+      when: patroni_node_state.json.role in ['master', 'primary', 'leader']
+      changed_when: true
+
+    - name: Restart Patroni
+      ansible.builtin.service:
+        name: patroni
+        state: restarted
+
+    - name: Wait for the node to become healthy again
+      ansible.builtin.uri:
+        url: "http://{{ patroni_node_ip }}:{{ patroni_restapi_port }}/health"
+        status_code: [200]
+      register: patroni_health
+      retries: 60
+      delay: 5
+      until: patroni_health is succeeded
+      changed_when: false

@@ -1,0 +1,12 @@
+---
+- name: Install Patroni {{ patroni_version }}
+  ansible.builtin.include_tasks: install.yml
+  tags: [patroni, patroni_install]
+
+- name: Configure Patroni
+  ansible.builtin.include_tasks: configure.yml
+  tags: [patroni, patroni_config]
+
+- name: Bootstrap and start the cluster
+  ansible.builtin.include_tasks: service.yml
+  tags: [patroni, patroni_service]

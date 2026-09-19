@@ -1,0 +1,146 @@
+---
+- name: Create the etcd group
+  ansible.builtin.group:
+    name: "{{ etcd_group }}"
+    system: true
+    state: present
+
+- name: Create the etcd user
+  ansible.builtin.user:
+    name: "{{ etcd_user }}"
+    group: "{{ etcd_group }}"
+    system: true
+    shell: /usr/sbin/nologin
+    home: "{{ etcd_data_dir }}"
+    create_home: false
+    state: present
+
+- name: Create the etcd directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ etcd_user }}"
+    group: "{{ etcd_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ etcd_data_dir }}", mode: "0700"}
+    - {path: "{{ etcd_conf_dir }}", mode: "0755"}
+
+- name: Check the installed etcd version
+  ansible.builtin.command: "{{ etcd_bin_dir }}/etcd --version"
+  register: etcd_installed_version
+  changed_when: false
+  failed_when: false
+
+- name: Install the etcd binaries
+  when: >-
+    etcd_installed_version.rc != 0 or
+    ('etcd Version: ' ~ etcd_version) not in etcd_installed_version.stdout
+  block:
+    - name: Download the etcd release archive
+      ansible.builtin.get_url:
+        url: "{{ etcd_download_url }}"
+        dest: "{{ etcd_download_dir }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
+        mode: "0644"
+      register: etcd_download
+      retries: 3
+      delay: 5
+      until: etcd_download is succeeded
+
+    - name: Unpack the etcd release archive
+      ansible.builtin.unarchive:
+        src: "{{ etcd_download_dir }}/etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
+        dest: "{{ etcd_download_dir }}"
+        remote_src: true
+        extra_opts:
+          - --strip-components=1
+          - --wildcards
+          - "*/etcd"
+          - "*/etcdctl"
+          - "*/etcdutl"
+        creates: "{{ etcd_download_dir }}/etcd"
+
+    - name: Install the etcd binaries into {{ etcd_bin_dir }}
+      ansible.builtin.copy:
+        src: "{{ etcd_download_dir }}/{{ item }}"
+        dest: "{{ etcd_bin_dir }}/{{ item }}"
+        remote_src: true
+        owner: root
+        group: root
+        mode: "0755"
+      loop:
+        - etcd
+        - etcdctl
+        - etcdutl
+      notify: Restart etcd
+
+    - name: Remove the unpacked binaries from the download directory
+      ansible.builtin.file:
+        path: "{{ etcd_download_dir }}/{{ item }}"
+        state: absent
+      loop:
+        - etcd
+        - etcdctl
+        - etcdutl
+        - "etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
+
+- name: Detect an already bootstrapped member directory
+  ansible.builtin.stat:
+    path: "{{ etcd_data_dir }}/member"
+  register: etcd_member_dir
+
+- name: Deploy the etcd configuration
+  ansible.builtin.template:
+    src: etcd.conf.yml.j2
+    dest: "{{ etcd_conf_dir }}/etcd.conf.yml"
+    owner: "{{ etcd_user }}"
+    group: "{{ etcd_group }}"
+    mode: "0640"
+  notify: Restart etcd
+
+- name: Deploy the etcdctl environment profile
+  ansible.builtin.template:
+    src: etcdctl.sh.j2
+    dest: /etc/profile.d/etcdctl.sh
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy the etcd systemd unit
+  ansible.builtin.template:
+    src: etcd.service.j2
+    dest: /etc/systemd/system/etcd.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify:
+    - Reload systemd
+    - Restart etcd
+
+- name: Flush handlers so etcd starts with the final configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start etcd
+  ansible.builtin.service:
+    name: etcd
+    state: started
+    enabled: true
+
+- name: Wait for the etcd client port to accept connections
+  ansible.builtin.wait_for:
+    host: "{{ etcd_node_ip }}"
+    port: "{{ etcd_client_port }}"
+    timeout: 120
+
+- name: Wait for the etcd cluster to report a healthy endpoint
+  ansible.builtin.command: >-
+    {{ etcd_bin_dir }}/etcdctl
+    --endpoints=http://{{ etcd_node_ip }}:{{ etcd_client_port }}
+    endpoint health
+  environment:
+    ETCDCTL_API: "3"
+  register: etcd_health
+  changed_when: false
+  retries: 20
+  delay: 5
+  until: etcd_health.rc == 0

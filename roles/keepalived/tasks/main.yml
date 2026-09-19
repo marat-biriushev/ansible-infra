@@ -1,0 +1,48 @@
+---
+- name: Install keepalived
+  ansible.builtin.package:
+    name: keepalived
+    state: present
+  register: keepalived_pkg
+  retries: 3
+  delay: 5
+  until: keepalived_pkg is succeeded
+
+- name: Deploy the HAProxy health check script
+  ansible.builtin.template:
+    src: check_haproxy.sh.j2
+    dest: /usr/local/bin/check_haproxy.sh
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart keepalived
+
+- name: Deploy the VRRP state notification script
+  ansible.builtin.template:
+    src: keepalived-notify.sh.j2
+    dest: "{{ keepalived_notify_script }}"
+    owner: root
+    group: root
+    mode: "0755"
+  notify: Restart keepalived
+
+- name: Deploy the keepalived configuration
+  ansible.builtin.template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  notify: Restart keepalived
+
+- name: Enable and start keepalived
+  ansible.builtin.service:
+    name: keepalived
+    state: started
+    enabled: true
+
+- name: Verify that the VIP is held by exactly one node
+  ansible.builtin.include_tasks: verify.yml
+  run_once: true
+  tags: [keepalived_verify]

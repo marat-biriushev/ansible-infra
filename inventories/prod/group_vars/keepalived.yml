@@ -1,0 +1,6 @@
+---
+keepalived_vip: 10.30.10.20/24
+keepalived_interface: "{{ cluster_interface }}"
+keepalived_virtual_router_id: 61
+keepalived_advert_int: 1
+keepalived_track_process: haproxy

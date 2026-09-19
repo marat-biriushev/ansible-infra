@@ -1,0 +1,11 @@
+---
+haproxy_bind_address: "0.0.0.0"
+haproxy_primary_port: 5000        # read/write -> current leader
+haproxy_replica_port: 5001        # read-only  -> replicas
+haproxy_stats_port: 7000
+haproxy_stats_user: admin
+haproxy_maxconn: 1000
+haproxy_default_server_maxconn: 200
+haproxy_timeout_client: 30m
+haproxy_timeout_server: 30m
+haproxy_timeout_connect: 4s

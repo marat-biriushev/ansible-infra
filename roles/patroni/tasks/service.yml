@@ -1,0 +1,54 @@
+---
+- name: Flush handlers before starting the cluster
+  ansible.builtin.meta: flush_handlers
+
+- name: Start Patroni on the bootstrap node ({{ patroni_bootstrap_host }})
+  ansible.builtin.service:
+    name: patroni
+    state: started
+    enabled: true
+  when: inventory_hostname == patroni_bootstrap_host
+
+- name: Wait for the bootstrap node to become the leader
+  ansible.builtin.uri:
+    url: "http://{{ patroni_node_ip }}:{{ patroni_restapi_port }}/leader"
+    status_code: [200]
+  register: patroni_leader_check
+  retries: 60
+  delay: 5
+  until: patroni_leader_check is succeeded
+  when: inventory_hostname == patroni_bootstrap_host
+  changed_when: false
+
+- name: Start Patroni on the remaining nodes
+  ansible.builtin.service:
+    name: patroni
+    state: started
+    enabled: true
+  when: inventory_hostname != patroni_bootstrap_host
+
+- name: Wait for every node to report a healthy Patroni REST API
+  ansible.builtin.uri:
+    url: "http://{{ patroni_node_ip }}:{{ patroni_restapi_port }}/health"
+    status_code: [200]
+  register: patroni_health
+  retries: 60
+  delay: 5
+  until: patroni_health is succeeded
+  changed_when: false
+
+- name: Collect the cluster state
+  ansible.builtin.command: >-
+    {{ patroni_bin_dir }}/patronictl -c {{ patroni_config_file }} list -f json
+  register: patroni_cluster_state
+  changed_when: false
+  run_once: true
+  delegate_to: "{{ patroni_bootstrap_host }}"
+
+- name: Assert that exactly one leader is running
+  ansible.builtin.assert:
+    that:
+      - (patroni_cluster_state.stdout | from_json | selectattr('Role', 'in', ['Leader', 'Standby Leader']) | list | length) == 1
+    fail_msg: "The cluster does not have exactly one leader: {{ patroni_cluster_state.stdout }}"
+    success_msg: "Cluster {{ patroni_scope }} has one leader and {{ groups[patroni_group_name] | length - 1 }} standby node(s)"
+  run_once: true

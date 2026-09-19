@@ -1,0 +1,38 @@
+---
+# Planned switchover to a chosen replica.
+#   ansible-playbook -i inventories/prod playbooks/patroni_switchover.yml -e candidate=pg-prod-db-02
+- name: Planned Patroni switchover
+  hosts: patroni[0]
+  gather_facts: false
+  vars:
+    candidate: ""
+  tasks:
+    - name: Assert that a candidate was given
+      ansible.builtin.assert:
+        that:
+          - candidate | length > 0
+          - candidate in groups['patroni']
+        fail_msg: "Pass a candidate from the patroni group: -e candidate=<host>"
+
+    - name: Read the current cluster state
+      ansible.builtin.command: >-
+        {{ patroni_bin_dir }}/patronictl -c {{ patroni_config_file }} list -f json
+      register: patroni_state
+      changed_when: false
+
+    - name: Assert that the candidate is streaming
+      ansible.builtin.assert:
+        that:
+          - (patroni_state.stdout | from_json | selectattr('Member', 'equalto', candidate) | map(attribute='State') | first) == 'streaming'
+        fail_msg: "{{ candidate }} is not streaming - refusing to switch over"
+
+    - name: Perform the switchover
+      ansible.builtin.command: >-
+        {{ patroni_bin_dir }}/patronictl -c {{ patroni_config_file }}
+        switchover {{ patroni_scope }} --candidate {{ candidate }} --force
+      register: patroni_switchover
+      changed_when: true
+
+    - name: Show the result
+      ansible.builtin.debug:
+        var: patroni_switchover.stdout_lines

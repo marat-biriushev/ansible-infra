@@ -1,0 +1,24 @@
+---
+- name: Install the PGDG repository RPM
+  ansible.builtin.dnf:
+    name: >-
+      https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_major_version }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    state: present
+    disable_gpg_check: true
+  when: postgresql_manage_repository | bool
+
+- name: Disable the built-in postgresql module stream
+  ansible.builtin.command: dnf -y module disable postgresql
+  register: postgresql_module_disable
+  changed_when: "'Disabling module' in postgresql_module_disable.stdout"
+  failed_when: false
+  when: postgresql_manage_repository | bool
+
+- name: Install the PostgreSQL packages
+  ansible.builtin.dnf:
+    name: "{{ postgresql_packages + postgresql_extra_packages }}"
+    state: present
+  register: postgresql_install_result
+  retries: 3
+  delay: 5
+  until: postgresql_install_result is succeeded

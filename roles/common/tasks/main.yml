@@ -1,0 +1,57 @@
+---
+- name: Update the apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+
+- name: Install base packages
+  ansible.builtin.package:
+    name: "{{ common_base_packages }}"
+    state: present
+  register: common_pkg
+  retries: 3
+  delay: 5
+  until: common_pkg is succeeded
+
+- name: Set the system timezone
+  community.general.timezone:
+    name: "{{ common_timezone }}"
+  notify: Restart cron
+
+- name: Deploy the chrony configuration
+  ansible.builtin.template:
+    src: chrony.conf.j2
+    dest: "{{ (ansible_os_family == 'Debian') | ternary('/etc/chrony/chrony.conf', '/etc/chrony.conf') }}"
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Enable and start chrony
+  ansible.builtin.service:
+    name: "{{ (ansible_os_family == 'Debian') | ternary('chrony', 'chronyd') }}"
+    state: started
+    enabled: true
+
+- name: Apply kernel parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/60-ansible-common.conf
+    sysctl_set: true
+    state: present
+    reload: true
+  loop: "{{ common_sysctl | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+
+- name: Manage /etc/hosts entries for the inventory
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} ANSIBLE MANAGED - {{ pg_cluster_name | default('inventory') }}"
+    block: |
+      {% for host in groups['all'] | sort %}
+      {{ hostvars[host].ansible_host | default(hostvars[host].ansible_default_ipv4.address | default('')) }} {{ host }}
+      {% endfor %}
+  when: common_manage_hosts_file | bool

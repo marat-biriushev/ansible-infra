@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+[Unit]
+Description=Patroni {{ patroni_version }} - PostgreSQL {{ postgresql_version }} HA ({{ patroni_scope }})
+Documentation=https://patroni.readthedocs.io/
+After=syslog.target network-online.target etcd.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ postgresql_user }}
+Group={{ postgresql_group }}
+Environment=PATRONI_POSTGRESQL_DATA_DIR={{ postgresql_data_dir }}
+ExecStart={{ patroni_bin_dir }}/patroni {{ patroni_config_file }}
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=process
+KillSignal=SIGINT
+Restart=on-failure
+RestartSec=10
+TimeoutSec=60
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

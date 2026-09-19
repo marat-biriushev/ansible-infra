@@ -1,0 +1,27 @@
+---
+haproxy_bind_address: "0.0.0.0"
+haproxy_primary_port: 5000        # read/write  -> current Patroni leader
+haproxy_replica_port: 5001        # read-only   -> healthy replicas
+haproxy_stats_port: 7000
+haproxy_stats_enabled: true
+haproxy_stats_uri: /stats
+haproxy_stats_user: admin
+haproxy_stats_password: "changeme"
+
+haproxy_maxconn: 1000
+haproxy_default_server_maxconn: 200
+haproxy_timeout_connect: 4s
+haproxy_timeout_client: 30m
+haproxy_timeout_server: 30m
+haproxy_timeout_check: 3s
+haproxy_check_interval: 3s
+haproxy_check_rise: 2
+haproxy_check_fall: 3
+
+haproxy_backend_group: patroni    # inventory group holding the DB nodes
+patroni_restapi_port: 8008
+postgresql_port: 5432
+
+# Bind to the keepalived VIP even when it lives on the peer node
+haproxy_ip_nonlocal_bind: true
+haproxy_conf_file: /etc/haproxy/haproxy.cfg

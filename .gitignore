@@ -1,0 +1,13 @@
+*.retry
+*.pyc
+__pycache__/
+.vault_pass
+.venv/
+venv/
+collections/
+galaxy_roles/
+.facts_cache/
+*.log
+.idea/
+.vscode/
+inventories/*/host_vars/*/vault.yml.decrypted

@@ -1,0 +1,63 @@
+---
+- name: Load the OS specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
+- name: Install the PostgreSQL packages on the Debian family
+  ansible.builtin.include_tasks: install_debian.yml
+  when: ansible_os_family == 'Debian'
+
+- name: Install the PostgreSQL packages on the RedHat family
+  ansible.builtin.include_tasks: install_redhat.yml
+  when: ansible_os_family == 'RedHat'
+
+- name: Disable the packaged PostgreSQL service (Patroni owns the cluster)
+  ansible.builtin.systemd:
+    name: "{{ postgresql_service_name }}"
+    state: stopped
+    enabled: false
+    masked: true
+  failed_when: false
+
+- name: Create the PostgreSQL directories
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ postgresql_user }}"
+    group: "{{ postgresql_group }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - {path: "{{ postgresql_data_dir | dirname }}", mode: "0750"}
+    - {path: "{{ postgresql_data_dir }}", mode: "0700"}
+    - {path: "{{ postgresql_log_dir }}", mode: "0750"}
+    - {path: "{{ postgresql_archive_dir }}", mode: "0750"}
+  loop_control:
+    label: "{{ item.path }}"
+
+- name: Create a dedicated WAL directory
+  ansible.builtin.file:
+    path: "{{ postgresql_wal_dir }}"
+    state: directory
+    owner: "{{ postgresql_user }}"
+    group: "{{ postgresql_group }}"
+    mode: "0700"
+  when: postgresql_wal_dir | length > 0
+
+- name: Set the resource limits for the postgres user
+  community.general.pam_limits:
+    domain: "{{ postgresql_user }}"
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop: "{{ postgresql_limits }}"
+  loop_control:
+    label: "{{ item.type }} {{ item.item }} {{ item.value }}"
+
+- name: Add the PostgreSQL binaries to the postgres user PATH
+  ansible.builtin.lineinfile:
+    path: "/etc/profile.d/postgresql.sh"
+    line: "export PATH={{ postgresql_bin_dir }}:$PATH"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+    regexp: "^export PATH={{ postgresql_bin_dir | regex_escape }}"

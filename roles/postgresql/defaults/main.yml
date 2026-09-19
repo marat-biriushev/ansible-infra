@@ -1,0 +1,29 @@
+---
+postgresql_version: 18
+postgresql_port: 5432
+postgresql_user: postgres
+postgresql_group: postgres
+
+# Patroni bootstraps and owns this directory - the packages must not
+# create a cluster of their own here.
+postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/data"
+postgresql_wal_dir: ""            # set to a path to keep pg_wal on a separate volume
+postgresql_log_dir: "/var/log/postgresql"
+postgresql_archive_dir: "/var/lib/postgresql/{{ postgresql_version }}/archive"
+
+postgresql_manage_repository: true
+postgresql_pgdg_repo_url: "https://apt.postgresql.org/pub/repos/apt"
+postgresql_pgdg_key_url: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+
+postgresql_extra_packages: []
+
+postgresql_locale: en_US.UTF-8
+postgresql_encoding: UTF8
+
+postgresql_limits:
+  - {type: soft, item: nofile, value: 65536}
+  - {type: hard, item: nofile, value: 65536}
+  - {type: soft, item: nproc, value: 16384}
+  - {type: hard, item: nproc, value: 16384}
+  - {type: soft, item: memlock, value: unlimited}
+  - {type: hard, item: memlock, value: unlimited}

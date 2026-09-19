@@ -1,0 +1,21 @@
+---
+profile: production
+
+exclude_paths:
+  - collections/
+  - galaxy_roles/
+  - .venv/
+  - .github/
+
+skip_list:
+  - yaml[line-length]
+  # Roles in this repository intentionally share a small set of
+  # cross-role variables (postgresql_*, patroni_restapi_port,
+  # trusted_networks) so that one value in group_vars drives every role.
+  - var-naming[no-role-prefix]
+
+warn_list:
+  - experimental
+
+kinds:
+  - yaml: "**/inventories/**/*.yml"

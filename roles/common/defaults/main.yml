@@ -1,0 +1,26 @@
+---
+common_timezone: Etc/UTC
+common_manage_hosts_file: true
+common_manage_firewall: false
+common_ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+
+common_base_packages:
+  - curl
+  - vim
+  - htop
+  - rsync
+  - tar
+  - unzip
+  - jq
+  - chrony
+
+common_sysctl:
+  vm.swappiness: 1
+  vm.overcommit_memory: 2
+  vm.overcommit_ratio: 90
+  net.ipv4.tcp_keepalive_time: 300
+  net.ipv4.tcp_keepalive_intvl: 30
+  net.ipv4.tcp_keepalive_probes: 5
+  net.core.somaxconn: 4096

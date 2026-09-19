@@ -1,0 +1,16 @@
+---
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart patroni
+  ansible.builtin.service:
+    name: patroni
+    state: restarted
+  when: patroni_allow_restart | default(false) | bool
+
+- name: Reload patroni
+  ansible.builtin.service:
+    name: patroni
+    state: reloaded
+  failed_when: false
