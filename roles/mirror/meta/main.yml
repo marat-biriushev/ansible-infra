@@ -1,0 +1,8 @@
+---
+galaxy_info:
+  role_name: mirror
+  author: infra
+  description: Point the package managers of the host at the corporate mirror
+  license: MIT
+  min_ansible_version: "2.15"
+dependencies: []

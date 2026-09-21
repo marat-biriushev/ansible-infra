@@ -25,3 +25,9 @@ postgresql_port: 5432
 # Bind to the keepalived VIP even when it lives on the peer node
 haproxy_ip_nonlocal_bind: true
 haproxy_conf_file: /etc/haproxy/haproxy.cfg
+
+# firewalld / SELinux (RHEL)
+manage_firewall: false
+haproxy_manage_selinux: true
+trusted_networks:
+  - 10.0.0.0/8

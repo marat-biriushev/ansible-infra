@@ -15,7 +15,28 @@ common_ntp_servers:
   - 0.pool.ntp.org
   - 1.pool.ntp.org
 common_manage_hosts_file: true
-common_manage_firewall: true
+manage_firewall: true             # firewalld rules are managed by the roles
+
+# --- corporate mirror -------------------------------------------------
+# Everything the playbooks download comes from here: PGDG packages, the
+# etcd release archive and the Python wheels for the Patroni virtualenv.
+mirror_base_url: "http://mirror.ipotekabank.uz"
+
+# Base OS repositories. The VMs normally already point at the mirror, so
+# Ansible does not touch BaseOS/AppStream (or sources.list) unless asked.
+mirror_manage_os_repos: false
+mirror_manage_epel: false
+
+# PGDG mirrored under the paths below - adjust to the layout of the
+# mirror if it differs.
+postgresql_pgdg_rhel_baseurl: >-
+  {{ mirror_base_url }}/postgresql/repos/yum/{{ postgresql_version }}/redhat/rhel-$releasever-$basearch
+postgresql_pgdg_rhel_gpgkey: "{{ mirror_base_url }}/postgresql/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL"
+postgresql_pgdg_repo_url: "{{ mirror_base_url }}/postgresql/repos/apt"
+postgresql_pgdg_key_url: "{{ mirror_base_url }}/postgresql/keys/ACCC4CF8.asc"
+
+# etcd release archives: <base>/etcd/v<version>/etcd-v<version>-linux-amd64.tar.gz
+etcd_download_base_url: "{{ mirror_base_url }}/etcd"
 
 # --- networking -----------------------------------------------------
 trusted_networks:

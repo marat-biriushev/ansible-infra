@@ -10,6 +10,24 @@ patroni_pip_packages:
   - python-dateutil
   - ydiff
 
+# Packages needed to build the virtualenv. The wheels come from the pip
+# index configured by the mirror role, so no compiler is needed in the
+# normal case - gcc stays in the list for source-only wheels.
+patroni_build_packages_by_os:
+  RedHat:
+    - python3
+    - python3-devel
+    - python3-pip
+    - gcc
+  Debian:
+    - python3
+    - python3-dev
+    - python3-venv
+    - python3-pip
+    - gcc
+    - libpq-dev
+patroni_build_packages: "{{ patroni_build_packages_by_os[ansible_os_family] }}"
+
 patroni_conf_dir: /etc/patroni
 patroni_config_file: "{{ patroni_conf_dir }}/patroni.yml"
 patroni_log_dir: /var/log/patroni
@@ -55,8 +73,16 @@ postgresql_version: 18
 postgresql_port: 5432
 postgresql_user: postgres
 postgresql_group: postgres
-postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/data"
-postgresql_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+postgresql_home_by_os:
+  RedHat: /var/lib/pgsql
+  Debian: /var/lib/postgresql
+postgresql_bin_dir_by_os:
+  RedHat: "/usr/pgsql-{{ postgresql_version }}/bin"
+  Debian: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+postgresql_home: "{{ postgresql_home_by_os[ansible_os_family] }}"
+postgresql_bin_dir: "{{ postgresql_bin_dir_by_os[ansible_os_family] }}"
+postgresql_data_dir: "{{ postgresql_home }}/{{ postgresql_version }}/data"
+postgresql_log_dir: "{{ (ansible_os_family == 'Debian') | ternary('/var/log/postgresql', postgresql_data_dir ~ '/log') }}"
 postgresql_encoding: UTF8
 postgresql_locale: en_US.UTF-8
 
@@ -93,6 +119,16 @@ patroni_tags:
 # /dev/watchdog is usually absent in virtual machines; switch to
 # "automatic" once the watchdog device is available on the VMs.
 patroni_watchdog_mode: "off"
+
+# --- firewalld (RHEL) -------------------------------------------------
+manage_firewall: false
+patroni_haproxy_group_name: haproxy
+patroni_restapi_firewall_sources: >-
+  {{ (groups[patroni_group_name] | default([]) + groups[patroni_haproxy_group_name] | default([]))
+     | map('extract', hostvars)
+     | map(attribute='ansible_host')
+     | map('regex_replace', '$', '/32')
+     | list }}
 
 # --- safety ----------------------------------------------------------
 # A Patroni restart on the leader triggers a failover, so the handler is

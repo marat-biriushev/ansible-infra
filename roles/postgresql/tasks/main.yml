@@ -26,6 +26,7 @@
     group: "{{ postgresql_group }}"
     mode: "{{ item.mode }}"
   loop:
+    - {path: "{{ postgresql_home }}", mode: "0750"}
     - {path: "{{ postgresql_data_dir | dirname }}", mode: "0750"}
     - {path: "{{ postgresql_data_dir }}", mode: "0700"}
     - {path: "{{ postgresql_log_dir }}", mode: "0750"}

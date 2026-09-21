@@ -1,18 +1,22 @@
 ---
-- name: Install the PGDG repository RPM
-  ansible.builtin.dnf:
-    name: >-
-      https://download.postgresql.org/pub/repos/yum/reporpms/EL-{{ ansible_distribution_major_version }}-x86_64/pgdg-redhat-repo-latest.noarch.rpm
-    state: present
-    disable_gpg_check: true
+- name: Configure the PGDG repository
   when: postgresql_manage_repository | bool
+  block:
+    - name: Deploy the PGDG repository file
+      ansible.builtin.template:
+        src: pgdg.repo.j2
+        dest: /etc/yum.repos.d/pgdg-mirror.repo
+        owner: root
+        group: root
+        mode: "0644"
 
-- name: Disable the built-in postgresql module stream
-  ansible.builtin.command: dnf -y module disable postgresql
-  register: postgresql_module_disable
-  changed_when: "'Disabling module' in postgresql_module_disable.stdout"
-  failed_when: false
-  when: postgresql_manage_repository | bool
+    # RHEL 10 dropped modularity, so there is no postgresql module there.
+    - name: Disable the built-in postgresql module stream
+      ansible.builtin.command: dnf -y module disable postgresql
+      register: postgresql_module_disable
+      changed_when: "'Disabling module' in postgresql_module_disable.stdout"
+      failed_when: false
+      when: ansible_distribution_major_version is version('10', '<')
 
 - name: Install the PostgreSQL packages
   ansible.builtin.dnf:
@@ -22,3 +26,15 @@
   retries: 3
   delay: 5
   until: postgresql_install_result is succeeded
+
+- name: Make sure the PGDG packages did not initialise a cluster
+  ansible.builtin.stat:
+    path: "{{ postgresql_home }}/{{ postgresql_version }}/data/PG_VERSION"
+  register: postgresql_existing_cluster
+
+- name: Report a pre-existing cluster in the data directory
+  ansible.builtin.debug:
+    msg: >-
+      {{ postgresql_data_dir }} already contains a PostgreSQL cluster;
+      Patroni will adopt it instead of running initdb.
+  when: postgresql_existing_cluster.stat.exists

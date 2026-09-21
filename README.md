@@ -30,6 +30,7 @@ playbooks/
   patroni_switchover.yml     # плановое переключение лидера
   patroni_rolling_restart.yml
 roles/
+  mirror/                    # репозитории и pip через корпоративное зеркало
   common/                    # базовая настройка ОС
   etcd/                      # etcd v3 (DCS для Patroni)
   postgresql/                # пакеты PostgreSQL 18 из PGDG
@@ -96,10 +97,37 @@ ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
 ## Требования
 
 * Ansible core >= 2.15 на управляющей машине, Python 3 на целевых узлах.
-* Целевые ОС: Debian 12 / Ubuntu 22.04+ либо RHEL-совместимые 8/9.
+* Целевые ОС: **RHEL 9 и RHEL 10** (основная платформа), Debian 12 / Ubuntu 22.04+
+  поддерживаются тем же кодом.
 * Доступ по SSH с sudo без пароля (либо `--ask-become-pass`).
 * Сетевая доступность между узлами: 5432, 8008 (Patroni), 2379/2380 (etcd),
   5000/5001/7000 (HAProxy), VRRP (протокол 112) между балансировщиками.
+  На RHEL правила firewalld расставляют сами роли при `manage_firewall: true`.
+
+## Корпоративное зеркало
+
+Всё, что плейбуки скачивают, идёт через `http://mirror.ipotekabank.uz`
+(роль `mirror` + переменные в `group_vars/all/main.yml`):
+
+| Что | Переменная | Путь по умолчанию |
+|---|---|---|
+| PGDG для RHEL | `postgresql_pgdg_rhel_baseurl` | `/postgresql/repos/yum/18/redhat/rhel-$releasever-$basearch` |
+| PGDG для Debian | `postgresql_pgdg_repo_url` | `/postgresql/repos/apt` |
+| Архив etcd | `etcd_download_base_url` | `/etcd/v3.5.17/etcd-v3.5.17-linux-amd64.tar.gz` |
+| Python-колёса | `mirror_pypi_index_url` | `/pypi/simple` (пишется в `/etc/pip.conf`) |
+| BaseOS/AppStream | `mirror_rhel_*_url` | `/rhel/$releasever/{BaseOS,AppStream}/$basearch/os` |
+| sources.list | `mirror_debian_url` | `/debian`, `/debian-security` |
+
+Пути — предположение о раскладке зеркала: если она другая, поправьте
+переменные в `inventories/<env>/group_vars/all/main.yml`, менять роли не нужно.
+
+Базовые репозитории ОС по умолчанию **не трогаются**
+(`mirror_manage_os_repos: false`) — обычно образы VM уже настроены на
+зеркало. Поставьте `true`, если хотите, чтобы Ansible владел
+`/etc/yum.repos.d` (старые `.repo` переименовываются в `*.repo.disabled`)
+или `/etc/apt/sources.list` (оригинал сохраняется рядом).
+
+Если зеркало не раздаёт GPG-ключ PGDG — `postgresql_pgdg_rhel_gpgcheck: false`.
 
 ## Соглашения
 

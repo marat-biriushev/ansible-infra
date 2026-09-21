@@ -1,0 +1,22 @@
+---
+- name: Open the PostgreSQL port for the trusted networks
+  ansible.posix.firewalld:
+    zone: "{{ common_firewalld_zone | default('public') }}"
+    rich_rule: >-
+      rule family=ipv4 source address={{ item }}
+      port port={{ postgresql_port }} protocol=tcp accept
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ trusted_networks }}"
+
+- name: Open the Patroni REST API for the cluster and the load balancers
+  ansible.posix.firewalld:
+    zone: "{{ common_firewalld_zone | default('public') }}"
+    rich_rule: >-
+      rule family=ipv4 source address={{ item }}
+      port port={{ patroni_restapi_port }} protocol=tcp accept
+    permanent: true
+    immediate: true
+    state: enabled
+  loop: "{{ patroni_restapi_firewall_sources }}"

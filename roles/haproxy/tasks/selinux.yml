@@ -1,0 +1,20 @@
+---
+- name: Allow HAProxy to connect to the database backends
+  ansible.posix.seboolean:
+    name: haproxy_connect_any
+    state: true
+    persistent: true
+
+- name: Label the HAProxy listener ports
+  community.general.seport:
+    ports: "{{ item }}"
+    proto: tcp
+    setype: haproxy_port_t
+    state: present
+  loop:
+    - "{{ haproxy_primary_port }}"
+    - "{{ haproxy_replica_port }}"
+    - "{{ haproxy_stats_port }}"
+  failed_when: false
+  # Ports that already carry a type (for example 7000 -> afs3_fileserver_port_t)
+  # keep it; HAProxy is allowed to bind them through haproxy_connect_any.

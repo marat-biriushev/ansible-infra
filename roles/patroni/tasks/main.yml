@@ -7,6 +7,13 @@
   ansible.builtin.include_tasks: configure.yml
   tags: [patroni, patroni_config]
 
+- name: Open the PostgreSQL and Patroni ports in firewalld
+  ansible.builtin.include_tasks: firewall.yml
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == 'RedHat'
+  tags: [patroni, patroni_firewall]
+
 - name: Bootstrap and start the cluster
   ansible.builtin.include_tasks: service.yml
   tags: [patroni, patroni_service]

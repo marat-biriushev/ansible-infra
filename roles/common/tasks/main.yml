@@ -1,4 +1,7 @@
 ---
+- name: Load the OS specific variables
+  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
+
 - name: Update the apt cache
   ansible.builtin.apt:
     update_cache: true
@@ -7,7 +10,7 @@
 
 - name: Install base packages
   ansible.builtin.package:
-    name: "{{ common_base_packages }}"
+    name: "{{ common_base_packages + common_extra_packages }}"
     state: present
   register: common_pkg
   retries: 3
@@ -45,6 +48,22 @@
   loop: "{{ common_sysctl | dict2items }}"
   loop_control:
     label: "{{ item.key }}={{ item.value }}"
+
+- name: Make sure firewalld is installed and running
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == 'RedHat'
+  block:
+    - name: Install firewalld
+      ansible.builtin.dnf:
+        name: firewalld
+        state: present
+
+    - name: Enable and start firewalld
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: true
 
 - name: Manage /etc/hosts entries for the inventory
   ansible.builtin.blockinfile:

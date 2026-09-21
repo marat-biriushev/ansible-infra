@@ -5,5 +5,4 @@ postgresql_packages:
   - "postgresql-contrib-{{ postgresql_version }}"
   - libpq-dev
   - python3-psycopg2
-postgresql_bin_dir: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
 postgresql_service_name: postgresql

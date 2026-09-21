@@ -1,0 +1,11 @@
+---
+# curl is deliberately absent: RHEL 9/10 ship curl-minimal and installing
+# "curl" would force a package swap on every host.
+common_base_packages:
+  - vim-enhanced
+  - rsync
+  - tar
+  - unzip
+  - jq
+  - chrony
+  - policycoreutils-python-utils   # semanage, used for the SELinux port labels

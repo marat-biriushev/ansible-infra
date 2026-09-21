@@ -17,3 +17,12 @@ keepalived_check_weight: 20
 keepalived_use_unicast: true
 keepalived_node_ip: "{{ ansible_host | default(ansible_default_ipv4.address) }}"
 keepalived_notify_script: /usr/local/bin/keepalived-notify.sh
+
+# firewalld (RHEL): VRRP between the load balancers
+manage_firewall: false
+keepalived_firewall_sources: >-
+  {{ groups[keepalived_group_name]
+     | map('extract', hostvars)
+     | map(attribute='ansible_host')
+     | map('regex_replace', '$', '/32')
+     | list }}

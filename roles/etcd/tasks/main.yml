@@ -84,6 +84,12 @@
         - etcdutl
         - "etcd-v{{ etcd_version }}-linux-{{ etcd_arch }}.tar.gz"
 
+- name: Open the etcd ports in firewalld
+  ansible.builtin.include_tasks: firewall.yml
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == 'RedHat'
+
 - name: Detect an already bootstrapped member directory
   ansible.builtin.stat:
     path: "{{ etcd_data_dir }}/member"

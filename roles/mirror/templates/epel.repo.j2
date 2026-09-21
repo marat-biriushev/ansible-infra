@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+[mirror-epel]
+name=EPEL from {{ mirror_host }}
+baseurl={{ mirror_epel_url }}
+enabled=1
+gpgcheck=1
+gpgkey={{ mirror_epel_gpgkey }}

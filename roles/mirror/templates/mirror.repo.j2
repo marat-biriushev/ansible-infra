@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+[mirror-baseos]
+name=BaseOS from {{ mirror_host }}
+baseurl={{ mirror_rhel_baseos_url }}
+enabled=1
+gpgcheck={{ mirror_rhel_gpgcheck | ternary(1, 0) }}
+{% if mirror_rhel_gpgcheck %}
+gpgkey={{ mirror_rhel_gpgkey }}
+{% endif %}
+
+[mirror-appstream]
+name=AppStream from {{ mirror_host }}
+baseurl={{ mirror_rhel_appstream_url }}
+enabled=1
+gpgcheck={{ mirror_rhel_gpgcheck | ternary(1, 0) }}
+{% if mirror_rhel_gpgcheck %}
+gpgkey={{ mirror_rhel_gpgkey }}
+{% endif %}

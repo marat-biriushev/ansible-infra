@@ -43,6 +43,30 @@
       delegate_to: localhost
       become: false
 
+    - name: Assert that the distribution is supported
+      ansible.builtin.assert:
+        that:
+          - >-
+            (ansible_os_family == 'RedHat' and
+             ansible_distribution_major_version in supported_rhel_versions)
+            or ansible_os_family == 'Debian'
+        fail_msg: >-
+          {{ inventory_hostname }} runs {{ ansible_distribution }}
+          {{ ansible_distribution_major_version }}; supported are RHEL
+          {{ supported_rhel_versions | join('/') }} and the Debian family.
+      vars:
+        supported_rhel_versions: ["9", "10"]
+
+    - name: Assert that the cluster interface exists on the load balancers
+      ansible.builtin.assert:
+        that:
+          - cluster_interface in ansible_interfaces
+        fail_msg: >-
+          Interface "{{ cluster_interface }}" does not exist on
+          {{ inventory_hostname }} (found: {{ ansible_interfaces | join(', ') }}).
+          Set cluster_interface in the inventory - the keepalived VIP binds to it.
+      when: inventory_hostname in groups['keepalived']
+
     - name: Assert that exactly one keepalived node is configured as MASTER
       ansible.builtin.assert:
         that:
@@ -51,6 +75,13 @@
       run_once: true
       delegate_to: localhost
       become: false
+
+- name: Package mirror
+  hosts: pg_cluster
+  gather_facts: true
+  tags: [mirror]
+  roles:
+    - role: mirror
 
 - name: OS baseline
   hosts: pg_cluster

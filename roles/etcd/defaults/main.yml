@@ -29,3 +29,12 @@ etcd_log_level: info
 # Hosts that form the etcd cluster
 etcd_group_name: etcd
 etcd_node_ip: "{{ ansible_host | default(ansible_default_ipv4.address) }}"
+
+# firewalld (RHEL): the members talk to each other only
+manage_firewall: false
+etcd_firewall_sources: >-
+  {{ groups[etcd_group_name]
+     | map('extract', hostvars)
+     | map(attribute='etcd_node_ip')
+     | map('regex_replace', '$', '/32')
+     | list }}

@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+deb {{ mirror_debian_url }} {{ ansible_distribution_release }} {{ mirror_debian_components }}
+deb {{ mirror_debian_url }} {{ ansible_distribution_release }}-updates {{ mirror_debian_components }}
+deb {{ mirror_debian_security_url }} {{ ansible_distribution_release }}-security {{ mirror_debian_components }}

@@ -4,16 +4,38 @@ postgresql_port: 5432
 postgresql_user: postgres
 postgresql_group: postgres
 
+# Distribution defaults. RHEL keeps the data under /var/lib/pgsql, which
+# is what the SELinux targeted policy labels postgresql_db_t - moving the
+# cluster elsewhere on RHEL needs an extra semanage fcontext rule.
+postgresql_home_by_os:
+  RedHat: /var/lib/pgsql
+  Debian: /var/lib/postgresql
+postgresql_bin_dir_by_os:
+  RedHat: "/usr/pgsql-{{ postgresql_version }}/bin"
+  Debian: "/usr/lib/postgresql/{{ postgresql_version }}/bin"
+
+postgresql_home: "{{ postgresql_home_by_os[ansible_os_family] }}"
+postgresql_bin_dir: "{{ postgresql_bin_dir_by_os[ansible_os_family] }}"
+
 # Patroni bootstraps and owns this directory - the packages must not
 # create a cluster of their own here.
-postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/data"
+postgresql_data_dir: "{{ postgresql_home }}/{{ postgresql_version }}/data"
 postgresql_wal_dir: ""            # set to a path to keep pg_wal on a separate volume
-postgresql_log_dir: "/var/log/postgresql"
-postgresql_archive_dir: "/var/lib/postgresql/{{ postgresql_version }}/archive"
+postgresql_log_dir: "{{ (ansible_os_family == 'Debian') | ternary('/var/log/postgresql', postgresql_data_dir ~ '/log') }}"
+postgresql_archive_dir: "{{ postgresql_home }}/{{ postgresql_version }}/archive"
 
 postgresql_manage_repository: true
+
+# PGDG on the Debian family
 postgresql_pgdg_repo_url: "https://apt.postgresql.org/pub/repos/apt"
 postgresql_pgdg_key_url: "https://www.postgresql.org/media/keys/ACCC4CF8.asc"
+
+# PGDG on the RHEL family. Pointing these at the corporate mirror avoids
+# the pgdg-redhat-repo RPM and the download.postgresql.org round trip.
+postgresql_pgdg_rhel_baseurl: >-
+  https://download.postgresql.org/pub/repos/yum/{{ postgresql_version }}/redhat/rhel-$releasever-$basearch
+postgresql_pgdg_rhel_gpgkey: "https://download.postgresql.org/pub/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL"
+postgresql_pgdg_rhel_gpgcheck: true
 
 postgresql_extra_packages: []
 

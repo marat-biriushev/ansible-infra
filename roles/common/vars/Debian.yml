@@ -1,0 +1,10 @@
+---
+common_base_packages:
+  - curl
+  - vim
+  - rsync
+  - tar
+  - unzip
+  - jq
+  - chrony
+  - python3-apt

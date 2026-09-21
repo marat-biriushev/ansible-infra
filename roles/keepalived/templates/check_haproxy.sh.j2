@@ -1,7 +1,11 @@
 #!/bin/sh
 # {{ ansible_managed }}
 # Exit 0 while the local HAProxy is able to serve traffic.
-if ! /bin/systemctl is-active --quiet {{ keepalived_track_process }}; then
+#
+# The check deliberately avoids systemctl: under the SELinux targeted
+# policy keepalived_t may not talk to systemd, so the script looks for
+# the running process instead.
+if ! /usr/bin/pidof -q {{ keepalived_track_process }} >/dev/null 2>&1; then
     exit 1
 fi
 exit 0

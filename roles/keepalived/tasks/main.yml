@@ -8,6 +8,11 @@
   delay: 5
   until: keepalived_pkg is succeeded
 
+- name: Install the tools used by the health check script
+  ansible.builtin.package:
+    name: "{{ (ansible_os_family == 'RedHat') | ternary('procps-ng', 'procps') }}"
+    state: present
+
 - name: Deploy the HAProxy health check script
   ansible.builtin.template:
     src: check_haproxy.sh.j2
@@ -25,6 +30,12 @@
     group: root
     mode: "0755"
   notify: Restart keepalived
+
+- name: Allow VRRP in firewalld
+  ansible.builtin.include_tasks: firewall.yml
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == 'RedHat'
 
 - name: Deploy the keepalived configuration
   ansible.builtin.template:

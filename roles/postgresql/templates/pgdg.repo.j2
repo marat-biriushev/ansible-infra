@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+[pgdg{{ postgresql_version }}]
+name=PostgreSQL {{ postgresql_version }} for RHEL $releasever - $basearch
+baseurl={{ postgresql_pgdg_rhel_baseurl }}
+enabled=1
+gpgcheck={{ postgresql_pgdg_rhel_gpgcheck | ternary(1, 0) }}
+{% if postgresql_pgdg_rhel_gpgcheck %}
+gpgkey={{ postgresql_pgdg_rhel_gpgkey }}
+{% endif %}

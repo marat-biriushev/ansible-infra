@@ -1,20 +1,17 @@
 ---
 common_timezone: Etc/UTC
 common_manage_hosts_file: true
-common_manage_firewall: false
 common_ntp_servers:
   - 0.pool.ntp.org
   - 1.pool.ntp.org
 
-common_base_packages:
-  - curl
-  - vim
-  - htop
-  - rsync
-  - tar
-  - unzip
-  - jq
-  - chrony
+# firewalld (RHEL) is managed by every role that opens a port
+manage_firewall: false
+common_firewalld_zone: public
+
+# The per-distribution lists live in vars/<os_family>.yml; add your own
+# packages here instead of editing the base list.
+common_extra_packages: []
 
 common_sysctl:
   vm.swappiness: 1

@@ -4,8 +4,9 @@
 
 1. **etcd v3** (3 узла, на тех же VM, что и БД) — DCS, хранит состояние
    кластера и результат выборов лидера. Кворум — 2 из 3.
-2. **PostgreSQL 18** из репозитория PGDG. Пакетный кластер (`main` на Debian)
-   не создаётся и сервис маскируется — данными управляет Patroni.
+2. **PostgreSQL 18** из репозитория PGDG (на RHEL — `.repo`-файл на зеркало,
+   без `pgdg-redhat-repo` RPM). Пакетный кластер (`main` на Debian) не
+   создаётся и сервис маскируется — данными управляет Patroni.
 3. **Patroni 4.1.x** — в отдельном virtualenv `/opt/patroni`, unit
    `patroni.service`, конфиг `/etc/patroni/patroni.yml`.
 4. **HAProxy** (2 узла) — проверяет Patroni REST API и отдаёт на порт 5000
@@ -17,15 +18,18 @@
 Плейбук `playbooks/patroni_cluster.yml` выполняет:
 
 1. preflight — проверка топологии (>= 3 узла БД, нечётное число etcd,
-   2 балансировщика, ровно один `MASTER` в keepalived) и наличия секретов;
-2. `common` — время, NTP, sysctl, /etc/hosts;
-3. `etcd` — бинарники, конфиг, systemd, ожидание healthy-эндпоинта;
-4. `postgresql` — репозиторий PGDG, пакеты, каталоги, лимиты;
-5. `patroni` — venv, конфиг, unit; первым стартует
+   2 балансировщика, ровно один `MASTER` в keepalived), поддерживаемости
+   ОС (RHEL 9/10 или Debian), существования `cluster_interface` на
+   балансировщиках и наличия секретов;
+2. `mirror` — репозитории и `/etc/pip.conf` на корпоративное зеркало;
+3. `common` — время, NTP, sysctl, /etc/hosts, firewalld;
+4. `etcd` — бинарники, конфиг, systemd, ожидание healthy-эндпоинта;
+5. `postgresql` — репозиторий PGDG, пакеты, каталоги, лимиты;
+6. `patroni` — venv, конфиг, unit; первым стартует
    `groups['patroni'][0]` и выполняет bootstrap (initdb), остальные узлы
    поднимаются репликами через `pg_basebackup`;
-6. `haproxy` + `keepalived` — маршрутизация и VIP;
-7. итоговая сводка с `patronictl list` и строками подключения.
+7. `haproxy` + `keepalived` — маршрутизация, VIP, SELinux и firewalld;
+8. итоговая сводка с `patronictl list` и строками подключения.
 
 Плейбук идемпотентен: повторный прогон не пересоздаёт кластер, а приводит
 конфигурацию к описанной.
@@ -74,6 +78,34 @@ psql "host=<VIP> port=5001 user=postgres" -c "select pg_is_in_recovery();"   # t
 * **etcd initial-cluster-state.** Вычисляется по наличию каталога
   `<data_dir>/member`: `new` при первичном bootstrap, `existing` дальше —
   повторный прогон роли не ломает работающий кворум.
+
+## Особенности RHEL 9 / 10
+
+* **Пути данных.** На RHEL кластер живёт в `/var/lib/pgsql/18/data`
+  (метка SELinux `postgresql_db_t`), логи PostgreSQL — в `data/log`.
+  На Debian — `/var/lib/postgresql/18/data` и `/var/log/postgresql`.
+  Задаётся картами `postgresql_home_by_os` / `postgresql_bin_dir_by_os`,
+  так что перенос каталога переопределяется одной переменной (при
+  нестандартном пути на RHEL потребуется `semanage fcontext`).
+* **Модульность.** `dnf module disable postgresql` выполняется только на
+  RHEL 9 — в RHEL 10 модулей больше нет.
+* **SELinux.** Роль `haproxy` включает `haproxy_connect_any` и пытается
+  пометить порты 5000/5001/7000 как `haproxy_port_t`. Скрипт проверки
+  keepalived использует `pidof`, а не `systemctl`: домен `keepalived_t`
+  не имеет права обращаться к systemd.
+* **firewalld.** При `manage_firewall: true` (включено в прод-инвентори)
+  роли открывают только то, что нужно, и только нужным источникам:
+  etcd 2379/2380 — между членами кластера, 8008 — узлы БД и
+  балансировщики, 5432 и порты HAProxy — из `trusted_networks`,
+  VRRP — между балансировщиками.
+* **Пакеты.** Списки базовых пакетов разнесены по
+  `roles/common/vars/{RedHat,Debian}.yml`: на RHEL не ставится `curl`
+  (конфликт с `curl-minimal`) и `htop` (его нет без EPEL), зато
+  добавлены `policycoreutils-python-utils` и `glibc-langpack-en` для
+  локали `en_US.UTF-8`, которую использует initdb.
+* **Имя интерфейса.** `cluster_interface` (по умолчанию `eth0`) на RHEL
+  обычно `ens192`/`enp0s3` — preflight падает с понятным сообщением,
+  если интерфейса нет.
 
 ## Расширение репозитория
 

@@ -26,6 +26,18 @@
     group: haproxy
     mode: "0755"
 
+- name: Configure SELinux for HAProxy
+  ansible.builtin.include_tasks: selinux.yml
+  when:
+    - haproxy_manage_selinux | bool
+    - ansible_selinux.status | default('disabled') == 'enabled'
+
+- name: Open the HAProxy ports in firewalld
+  ansible.builtin.include_tasks: firewall.yml
+  when:
+    - manage_firewall | bool
+    - ansible_os_family == 'RedHat'
+
 - name: Deploy the HAProxy configuration
   ansible.builtin.template:
     src: haproxy.cfg.j2
