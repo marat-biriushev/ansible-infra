@@ -22,6 +22,7 @@
     state: present
     virtualenv: "{{ patroni_venv_dir }}"
     virtualenv_command: "python3 -m venv"
+    extra_args: "{{ patroni_pip_extra_args | default(omit, true) }}"
   register: patroni_pip
   retries: 3
   delay: 5

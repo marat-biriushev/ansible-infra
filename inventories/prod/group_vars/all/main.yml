@@ -10,11 +10,11 @@ pg_cluster_name: pg-prod
 pg_cluster_domain: prod.local
 
 # --- OS baseline ----------------------------------------------------
-common_timezone: Etc/UTC
-common_ntp_servers:
-  - 0.pool.ntp.org
-  - 1.pool.ntp.org
-common_manage_hosts_file: true
+# The infrastructure team owns the baseline of these machines (time
+# source, kernel parameters, /etc/hosts, the base package set), so the
+# common role changes none of it. Each area can be switched on per group
+# where a stack really needs it - see group_vars/patroni.yml.
+common_verify_time_sync: true     # read-only check, changes nothing
 manage_firewall: true             # firewalld rules are managed by the roles
 
 # --- corporate mirror -------------------------------------------------
@@ -40,6 +40,14 @@ postgresql_pgdg_key_url: "{{ mirror_base_url }}/repos/pgdg-apt/ACCC4CF8.asc"
 
 # etcd release archives: <base>/v<version>/etcd-v<version>-linux-amd64.tar.gz
 etcd_download_base_url: "{{ mirror_base_url }}/repos/etcd"
+
+# Python wheels for the Patroni virtualenv. Passed to pip for that venv
+# only - /etc/pip.conf is left to the infrastructure team.
+mirror_pypi_index_url: "{{ mirror_base_url }}/pypi/simple"
+mirror_pypi_trusted_host: "mirror.ipotekabank.uz"
+patroni_pip_extra_args: >-
+  --index-url {{ mirror_pypi_index_url }}
+  --trusted-host {{ mirror_pypi_trusted_host }}
 
 # --- networking -----------------------------------------------------
 trusted_networks:

@@ -45,6 +45,7 @@
 
 - name: Set the resource limits for the postgres user
   community.general.pam_limits:
+    dest: "{{ postgresql_limits_file }}"
     domain: "{{ postgresql_user }}"
     limit_type: "{{ item.type }}"
     limit_item: "{{ item.item }}"

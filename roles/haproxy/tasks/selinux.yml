@@ -1,4 +1,9 @@
 ---
+- name: Install the SELinux management tools
+  ansible.builtin.dnf:
+    name: policycoreutils-python-utils
+    state: present
+
 - name: Allow HAProxy to connect to the database backends
   ansible.posix.seboolean:
     name: haproxy_connect_any

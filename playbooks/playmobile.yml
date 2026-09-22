@@ -4,15 +4,17 @@
 #
 #   ansible-playbook -i inventories/dev  playbooks/playmobile.yml
 #   ansible-playbook -i inventories/prod playbooks/playmobile.yml --limit playm-prd-01
+#
+# The OS baseline (time source, kernel parameters, /etc/hosts, the base
+# package set) belongs to the infrastructure team, so this playbook does
+# not touch it: it only adds the Docker repository, the packages and
+# /etc/docker/daemon.json. The docker role writes its own .repo file, so
+# the mirror role is not needed here either.
 # ===================================================================
 - name: Playmobile application nodes
   hosts: playmobile
   gather_facts: true
   tags: [playmobile]
   roles:
-    - role: mirror
-      tags: [mirror]
-    - role: common
-      tags: [common]
     - role: docker
       tags: [docker]

@@ -1,0 +1,46 @@
+---
+# Read-only: the time source belongs to the infrastructure team, this
+# only reports whether it is doing its job. Nodes whose clocks drift
+# apart lose their Patroni lease and their etcd leader, so it is worth
+# knowing before anything is deployed.
+- name: Read the NTP synchronisation state
+  ansible.builtin.command: timedatectl show --property=NTPSynchronized --value
+  register: common_ntp_state
+  changed_when: false
+  failed_when: false
+
+- name: Read the chrony tracking summary
+  ansible.builtin.command: chronyc -n tracking
+  register: common_chrony_tracking
+  changed_when: false
+  failed_when: false
+
+- name: Set the clock facts
+  ansible.builtin.set_fact:
+    common_time_known: "{{ common_ntp_state.rc == 0 }}"
+    common_time_synced: "{{ common_ntp_state.rc == 0 and (common_ntp_state.stdout | trim) == 'yes' }}"
+    common_time_source: >-
+      {{ (common_chrony_tracking.stdout_lines | default([]) | select('search', '^(Reference ID|Stratum|System time)') | list)
+         | default(['chronyc unavailable'], true) | join('; ') }}
+
+- name: Report the clock state
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}:
+      {% if not common_time_known %}clock state unknown - timedatectl returned
+      {{ common_ntp_state.rc }}, check it by hand
+      {% elif common_time_synced %}clock synchronised
+      {% else %}CLOCK NOT SYNCHRONISED
+      {% endif %}- {{ common_time_source }}
+
+- name: Fail when the clock is not synchronised
+  ansible.builtin.fail:
+    msg: >-
+      {{ inventory_hostname }}: the clock is not synchronised with any time
+      source. Time sync is owned by the infrastructure team - raise it with
+      them. Pass -e common_time_sync_fail=false to continue anyway, or
+      -e common_verify_time_sync=false to skip the check entirely.
+  when:
+    - common_time_known
+    - not common_time_synced
+    - common_time_sync_fail | bool

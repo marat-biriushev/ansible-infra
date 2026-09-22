@@ -1,4 +1,9 @@
 ---
+- name: Install the tools the role needs
+  ansible.builtin.package:
+    name: tar
+    state: present
+
 - name: Create the etcd group
   ansible.builtin.group:
     name: "{{ etcd_group }}"

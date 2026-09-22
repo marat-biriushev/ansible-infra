@@ -28,6 +28,10 @@ patroni_build_packages_by_os:
     - libpq-dev
 patroni_build_packages: "{{ patroni_build_packages_by_os[ansible_os_family] }}"
 
+# Passed to pip for this virtualenv only, e.g.
+#   --index-url http://mirror/pypi/simple --trusted-host mirror
+patroni_pip_extra_args: ""
+
 patroni_conf_dir: /etc/patroni
 patroni_config_file: "{{ patroni_conf_dir }}/patroni.yml"
 patroni_log_dir: /var/log/patroni

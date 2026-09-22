@@ -66,6 +66,8 @@ make playmobile ENV=dev                 # один узел
 make playmobile ENV=prod LIMIT=playm-prd-01
 ```
 
+Плейбук `playmobile.yml` намеренно состоит из одной роли `docker` —
+базовую настройку ОС на этих узлах делает команда инфраструктуры.
 Роль `docker` (технологическая, переиспользуемая) кладёт `/etc/yum.repos.d/docker-ce.repo` с
 `baseurl=http://mirror.ipotekabank.uz/repos/docker/`, ставит
 `docker-ce`, `docker-ce-cli`, `containerd.io`, buildx и compose-плагины и
@@ -180,6 +182,49 @@ ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
 или `/etc/apt/sources.list` (оригинал сохраняется рядом).
 
 Если зеркало не раздаёт GPG-ключ PGDG — `postgresql_pgdg_rhel_gpgcheck: false`.
+
+## Разделение зон ответственности
+
+Базовую настройку ОС (источник времени, параметры ядра, `/etc/hosts`,
+базовый набор пакетов) держит команда инфраструктуры, поэтому роль
+`common` по умолчанию **не меняет ничего**:
+
+| Область | Переменная | По умолчанию |
+|---|---|---|
+| пакеты | `common_manage_packages` | `false` |
+| таймзона | `common_manage_timezone` | `false` |
+| chrony/NTP | `common_manage_chrony` | `false` |
+| sysctl | `common_manage_sysctl` | `false` |
+| `/etc/hosts` | `common_manage_hosts_file` | `false` |
+| проверка времени | `common_verify_time_sync` | `true` (только чтение) |
+
+Вместо настройки времени роль его **проверяет**: `timedatectl` +
+`chronyc tracking`, и падает с понятным сообщением, если часы не
+синхронизированы (расхождение времени рвёт lease Patroni и выборы лидера
+в etcd). Проверка отключается `-e common_verify_time_sync=false`, а
+строгость — `-e common_time_sync_fail=false`.
+
+Плейбук `playmobile.yml` роль `common` не подключает вообще: на app-узлах
+он ставит только docker-репозиторий, пакеты и `daemon.json`.
+
+Единственное исключение — `common_manage_sysctl: true` в
+`group_vars/patroni.yml`: тюнинг ядра под PostgreSQL. Он объявлен явно в
+инвентори, пишется в отдельный `/etc/sysctl.d/60-ansible-common.conf` и
+снимается одной строкой.
+
+Что ещё не трогается:
+
+* лимиты для `postgres` пишутся в `/etc/security/limits.d/90-postgresql.conf`,
+  а не в общий `limits.conf`;
+* индекс PyPI передаётся прямо в `pip` при создании venv Patroni
+  (`patroni_pip_extra_args`), общий `/etc/pip.conf` не создаётся
+  (`mirror_manage_pip_config: false`);
+* базовые репозитории ОС не переписываются (`mirror_manage_os_repos: false`);
+* инструменты ставит та роль, которой они нужны (`tar` — etcd,
+  `procps-ng` — keepalived, `policycoreutils-python-utils` — haproxy),
+  а не общий список пакетов;
+* всё, что всё-таки правится в общих файлах, пишется с `backup: true`
+  или через маркеры blockinfile.
 
 ## Соглашения
 

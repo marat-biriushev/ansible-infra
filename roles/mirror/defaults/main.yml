@@ -29,7 +29,8 @@ mirror_manage_epel: false
 mirror_epel_url: "{{ mirror_base_url }}/epel/$releasever/Everything/$basearch"
 mirror_epel_gpgkey: "{{ mirror_base_url }}/epel/RPM-GPG-KEY-EPEL-$releasever"
 
-# Python package index used by every pip install on the host (written to
-# /etc/pip.conf, so the Patroni virtualenv picks it up as well).
-mirror_manage_pip_config: true
+# /etc/pip.conf changes pip for every user on the host, so it is off by
+# default; the Patroni virtualenv gets the index through
+# patroni_pip_extra_args instead, which touches nothing outside the venv.
+mirror_manage_pip_config: false
 mirror_pypi_index_url: "{{ mirror_base_url }}/pypi/simple"

@@ -6,11 +6,11 @@ env_name: dev
 env_is_production: false
 
 # --- OS baseline ----------------------------------------------------
-common_timezone: Etc/UTC
-common_ntp_servers:
-  - 0.pool.ntp.org
-  - 1.pool.ntp.org
-common_manage_hosts_file: true
+# The infrastructure team owns the baseline of these machines (time
+# source, kernel parameters, /etc/hosts, the base package set), so the
+# common role changes none of it. Each area can be switched on per group
+# where a stack really needs it - see group_vars/patroni.yml.
+common_verify_time_sync: true     # read-only check, changes nothing
 manage_firewall: false            # no firewalld rules in dev
 
 # --- corporate mirror -------------------------------------------------

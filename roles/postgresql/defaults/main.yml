@@ -42,6 +42,9 @@ postgresql_extra_packages: []
 postgresql_locale: en_US.UTF-8
 postgresql_encoding: UTF8
 
+# A dedicated file in limits.d - /etc/security/limits.conf belongs to
+# the infrastructure team.
+postgresql_limits_file: /etc/security/limits.d/90-postgresql.conf
 postgresql_limits:
   - {type: soft, item: nofile, value: 65536}
   - {type: hard, item: nofile, value: 65536}
