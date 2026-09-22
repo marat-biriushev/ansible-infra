@@ -65,6 +65,8 @@ make play ENV=test PLAYBOOK=playbooks/<project>.yml CHECK=1   # dry run
 make play ENV=test PLAYBOOK=playbooks/<project>.yml           # apply
 make play ENV=prod PLAYBOOK=playbooks/<project>.yml LIMIT=host1 TAGS=config
 make play ENV=dev  PLAYBOOK=playbooks/<project>.yml ASK=1     # ask for the passwords
+
+# make has five targets only: deps, lint, syntax, ping, play
 ```
 
 Without the Makefile it is the usual invocation:
@@ -121,10 +123,6 @@ environment in `group_vars/all/main.yml`:
 | `etcd_download_base_url` | etcd release archives |
 | `mirror_pypi_index_url` | Python wheels |
 
-The `mirror` role can also repoint the base OS repositories
-(`mirror_manage_os_repos`, off by default - the images normally already
-come from the mirror).
-
 `galaxy.ansible.com` is not reachable from the network either: install
 the collections from an internal Galaxy proxy
 (`make deps GALAXY=<url>`, or the commented `[galaxy_server.internal]`
@@ -166,25 +164,17 @@ publishing SSHFP records it is worth turning on.
 The infrastructure team owns the OS baseline of these machines, so the
 `common` role changes nothing by default:
 
-| Area | Variable | Default |
-|---|---|---|
-| packages | `common_manage_packages` | `false` |
-| timezone | `common_manage_timezone` | `false` |
-| chrony / NTP | `common_manage_chrony` | `false` |
-| sysctl | `common_manage_sysctl` | `false` |
-| `/etc/hosts` | `common_manage_hosts_file` | `false` |
-| clock check | `common_verify_time_sync` | `true`, read-only |
+The `common` role is the whole of it, and it changes nothing: it reads
+`timedatectl` and `chronyc tracking` and stops with an explanation when
+the clock is not disciplined, because drift costs a Patroni lease, an
+etcd leader and a Kerberos ticket. Disable with
+`-e common_verify_time_sync=false`, downgrade to a warning with
+`-e common_time_sync_fail=false`.
 
-Instead of configuring time, the role verifies it (`timedatectl` plus
-`chronyc tracking`) and stops with an explanation when the clock is not
-disciplined - drift costs a Patroni lease, an etcd leader and a Kerberos
-ticket. Disable with `-e common_verify_time_sync=false`, downgrade to a
-warning with `-e common_time_sync_fail=false`.
-
-When a stack really needs a baseline change, it is enabled explicitly in
-the inventory where a reviewer sees it - as `common_manage_sysctl: true`
-in `group_vars/patroni.yml`, which is PostgreSQL kernel tuning written to
-a dedicated file in `/etc/sysctl.d/`.
+When a stack really needs a baseline change, it belongs to the role that
+needs it and is enabled explicitly in the inventory, where a reviewer
+sees it: `postgresql_manage_sysctl: true` in `group_vars/patroni.yml` is
+PostgreSQL kernel tuning, written to its own file in `/etc/sysctl.d/`.
 
 The same rule applies everywhere else: changes go to a dedicated file
 rather than a shared one (`/etc/security/limits.d/90-postgresql.conf`,

@@ -76,14 +76,7 @@
       delegate_to: localhost
       become: false
 
-- name: Package mirror
-  hosts: pg_cluster
-  gather_facts: true
-  tags: [mirror]
-  roles:
-    - role: mirror
-
-- name: OS baseline
+- name: Clock check
   hosts: pg_cluster
   gather_facts: true
   tags: [common]

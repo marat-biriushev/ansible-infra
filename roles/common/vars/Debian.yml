@@ -1,9 +1,0 @@
----
-# Only installed when common_manage_packages is enabled.
-common_base_packages:
-  - curl
-  - vim
-  - rsync
-  - tar
-  - unzip
-  - jq

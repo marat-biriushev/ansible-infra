@@ -1,60 +1,47 @@
 # Environment to act on: dev | test | prod
 ENV ?= test
 INV  = inventories/$(ENV)
+
+PLAYBOOK ?=
 LIMIT ?=
 TAGS ?=
 EXTRA ?=
-# ASK=1 prompts for the SSH and the sudo password (-k needs sshpass, or
-# use CONNECTION=paramiko); CONNECTION overrides the connection plugin.
+# CHECK=1 adds --check --diff
+CHECK ?=
+# ASK=1 adds -k -K (needs sshpass on the control node, or CONNECTION=paramiko)
 ASK ?=
 CONNECTION ?=
+# GALAXY=<url> points make deps at an internal ansible-galaxy proxy
+GALAXY ?=
 
-ANSIBLE_OPTS = -i $(INV) $(if $(LIMIT),--limit $(LIMIT),) $(if $(TAGS),--tags $(TAGS),) \
-               $(if $(ASK),-k -K,) $(if $(CONNECTION),-c $(CONNECTION),) $(EXTRA)
+OPTS = -i $(INV) \
+       $(if $(LIMIT),--limit $(LIMIT),) \
+       $(if $(TAGS),--tags $(TAGS),) \
+       $(if $(ASK),-k -K,) \
+       $(if $(CONNECTION),-c $(CONNECTION),) \
+       $(if $(CHECK),--check --diff,) \
+       $(EXTRA)
 
-.PHONY: help deps lint syntax ping play check patroni haproxy playmobile site switchover status
+.PHONY: help deps lint syntax ping play
 
 help:
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-14s\033[0m %s\n", $$1, $$2}'
-
-# Internal ansible-galaxy proxy, e.g.
-#   make deps GALAXY=http://nexus.otp.ipotekabank.uz/repository/ansible-galaxy/
-GALAXY ?=
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-10s\033[0m %s\n", $$1, $$2}'
+	@echo ""
+	@echo "make play ENV=prod PLAYBOOK=playbooks/playmobile.yml [LIMIT=] [TAGS=] [CHECK=1] [ASK=1]"
 
 deps: ## Install galaxy collections (GALAXY=<url> for an internal proxy)
 	ansible-galaxy collection install -r requirements.yml $(if $(GALAXY),-s $(GALAXY),)
 
-lint: ## Run yamllint + ansible-lint
+lint: ## yamllint + ansible-lint
 	yamllint .
 	ansible-lint
 
-syntax: ## Syntax check all playbooks
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/site.yml --syntax-check
+syntax: ## Syntax check every playbook
+	ansible-playbook -i $(INV) playbooks/site.yml --syntax-check
 
 ping: ## Check connectivity
-	ansible $(ANSIBLE_OPTS) all -m ping
+	ansible $(OPTS) $(if $(LIMIT),$(LIMIT),all) -m ping
 
-play: ## Run any playbook: make play ENV=prod PLAYBOOK=playbooks/x.yml [LIMIT=] [TAGS=] [CHECK=1]
+play: ## Run a playbook (PLAYBOOK is required)
 	@test -n "$(PLAYBOOK)" || { echo "PLAYBOOK is required, e.g. PLAYBOOK=playbooks/site.yml"; exit 2; }
-	ansible-playbook $(ANSIBLE_OPTS) $(PLAYBOOK) $(if $(CHECK),--check --diff,)
-
-check: ## Dry-run the patroni cluster playbook
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_cluster.yml --check --diff
-
-patroni: ## Deploy the patroni cluster
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_cluster.yml
-
-playmobile: ## Install/refresh Docker on the playmobile application nodes
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/playmobile.yml
-
-haproxy: ## Deploy only the haproxy/keepalived layer
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_cluster.yml --tags haproxy,keepalived
-
-site: ## Run the whole infrastructure playbook
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/site.yml
-
-status: ## Show patroni cluster state
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_status.yml
-
-switchover: ## Planned switchover (CANDIDATE=<host>)
-	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_switchover.yml -e "candidate=$(CANDIDATE)"
+	ansible-playbook $(OPTS) $(PLAYBOOK)

@@ -1,91 +1,41 @@
 ---
-- name: Load the OS specific variables
-  ansible.builtin.include_vars: "{{ ansible_os_family }}.yml"
-
-- name: Check that the clock is disciplined
-  ansible.builtin.include_tasks: verify_time.yml
+- name: Read the NTP synchronisation state
+  ansible.builtin.command: timedatectl show --property=NTPSynchronized --value
+  register: common_ntp_state
+  changed_when: false
+  failed_when: false
   when: common_verify_time_sync | bool
-  tags: [common, time]
 
-- name: Update the apt cache
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 3600
+- name: Read the chrony tracking summary
+  ansible.builtin.command: chronyc -n tracking
+  register: common_chrony_tracking
+  changed_when: false
+  failed_when: false
+  when: common_verify_time_sync | bool
+
+- name: Report the clock state
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}:
+      {% if common_ntp_state.rc != 0 %}clock state unknown - timedatectl returned
+      {{ common_ntp_state.rc }}, check it by hand
+      {% elif (common_ntp_state.stdout | trim) == 'yes' %}clock synchronised
+      {% else %}CLOCK NOT SYNCHRONISED
+      {% endif %}-
+      {{ (common_chrony_tracking.stdout_lines | default([])
+          | select('search', '^(Reference ID|Stratum|System time)') | list)
+         | default(['chronyc unavailable'], true) | join('; ') }}
+  when: common_verify_time_sync | bool
+
+- name: Fail when the clock is not synchronised
+  ansible.builtin.fail:
+    msg: >-
+      {{ inventory_hostname }}: the clock is not synchronised with any time
+      source. Time sync is owned by the infrastructure team - raise it with
+      them. Pass -e common_time_sync_fail=false to continue anyway, or
+      -e common_verify_time_sync=false to skip the check entirely.
   when:
-    - common_manage_packages | bool
-    - ansible_os_family == 'Debian'
-
-- name: Install base packages
-  ansible.builtin.package:
-    name: "{{ common_base_packages + common_extra_packages }}"
-    state: present
-  register: common_pkg
-  retries: 3
-  delay: 5
-  until: common_pkg is succeeded
-  when: common_manage_packages | bool
-
-- name: Set the system timezone
-  community.general.timezone:
-    name: "{{ common_timezone }}"
-  notify: Restart cron
-  when: common_manage_timezone | bool
-
-- name: Configure the time source
-  when: common_manage_chrony | bool
-  block:
-    - name: Deploy the chrony configuration
-      ansible.builtin.template:
-        src: chrony.conf.j2
-        dest: "{{ (ansible_os_family == 'Debian') | ternary('/etc/chrony/chrony.conf', '/etc/chrony.conf') }}"
-        owner: root
-        group: root
-        mode: "0644"
-        backup: true
-      notify: Restart chrony
-
-    - name: Enable and start chrony
-      ansible.builtin.service:
-        name: "{{ (ansible_os_family == 'Debian') | ternary('chrony', 'chronyd') }}"
-        state: started
-        enabled: true
-
-- name: Apply kernel parameters
-  ansible.posix.sysctl:
-    name: "{{ item.key }}"
-    value: "{{ item.value }}"
-    sysctl_file: "{{ common_sysctl_file }}"
-    sysctl_set: true
-    state: present
-    reload: true
-  loop: "{{ common_sysctl | dict2items }}"
-  loop_control:
-    label: "{{ item.key }}={{ item.value }}"
-  when: common_manage_sysctl | bool
-
-- name: Make sure firewalld is installed and running
-  when:
-    - manage_firewall | bool
-    - ansible_os_family == 'RedHat'
-  block:
-    - name: Install firewalld
-      ansible.builtin.dnf:
-        name: firewalld
-        state: present
-
-    - name: Enable and start firewalld
-      ansible.builtin.service:
-        name: firewalld
-        state: started
-        enabled: true
-
-- name: Manage /etc/hosts entries for the inventory
-  ansible.builtin.blockinfile:
-    path: /etc/hosts
-    marker: "# {mark} ANSIBLE MANAGED - {{ pg_cluster_name | default('inventory') }}"
-    backup: true
-    block: |
-      {% for host in groups['all'] | sort %}
-      {{ hostvars[host].ansible_host | default(hostvars[host].ansible_default_ipv4.address | default('')) }} {{ host }}
-      {% endfor %}
-  when: common_manage_hosts_file | bool
+    - common_verify_time_sync | bool
+    - common_time_sync_fail | bool
+    - common_ntp_state.rc == 0
+    - (common_ntp_state.stdout | trim) != 'yes'

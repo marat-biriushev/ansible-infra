@@ -1,6 +1,0 @@
-# {{ ansible_managed }}
-[global]
-index-url = {{ mirror_pypi_index_url }}
-{% if mirror_pypi_index_url.startswith('http://') %}
-trusted-host = {{ mirror_host }}
-{% endif %}

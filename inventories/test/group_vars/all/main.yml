@@ -22,11 +22,6 @@ manage_firewall: false            # no firewalld rules in test
 # etcd release archive and the Python wheels for the Patroni virtualenv.
 mirror_base_url: "https://mirror.ipotekabank.uz"
 
-# Base OS repositories. The VMs normally already point at the mirror, so
-# Ansible does not touch BaseOS/AppStream (or sources.list) unless asked.
-mirror_manage_os_repos: false
-mirror_manage_epel: false
-
 # Confirmed against a host that is already running: the mirror keeps the
 # upstream layout under /repos/<name>/. The paths below follow the same
 # convention but are NOT yet verified - check them and adjust here, the

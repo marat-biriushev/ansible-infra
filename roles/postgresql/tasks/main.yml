@@ -43,6 +43,19 @@
     mode: "0700"
   when: postgresql_wal_dir | length > 0
 
+- name: Apply the kernel parameters for PostgreSQL
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: "{{ postgresql_sysctl_file }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop: "{{ postgresql_sysctl | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  when: postgresql_manage_sysctl | bool
+
 - name: Set the resource limits for the postgres user
   community.general.pam_limits:
     dest: "{{ postgresql_limits_file }}"

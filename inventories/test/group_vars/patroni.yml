@@ -1,10 +1,10 @@
 ---
 # --- Patroni / PostgreSQL tuning for the TEST environment -----------
 # The only baseline change the database stack asks for: PostgreSQL
-# kernel tuning, written to /etc/sysctl.d/60-ansible-common.conf (never
-# to sysctl.conf). Agree it with the infrastructure team, or set it to
-# false and let them apply the values from roles/common/defaults.
-common_manage_sysctl: true
+# kernel tuning, written to /etc/sysctl.d/60-postgresql.conf (never to
+# sysctl.conf). Agree it with the infrastructure team, or set it to
+# false and let them apply the values from roles/postgresql/defaults.
+postgresql_manage_sysctl: true
 
 patroni_scope: "{{ pg_cluster_name }}"
 patroni_namespace: /service

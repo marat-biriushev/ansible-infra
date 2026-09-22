@@ -1,45 +1,7 @@
 ---
-# ===================================================================
-# OS baseline.
-#
-# Where the infrastructure team owns the baseline, this role must not
-# change it: every area below is opt-in and disabled by default. Enable
-# only what your stack really needs, in the inventory, where it is
-# visible to a reviewer.
-#
-# The one thing that runs by default is a read-only check that the clock
-# is disciplined - Patroni leases and etcd leader elections depend on it.
-# ===================================================================
-common_manage_packages: false
-common_manage_timezone: false
-common_manage_chrony: false
-common_manage_sysctl: false
-common_manage_hosts_file: false
-
+# The infrastructure team owns the OS baseline of these machines, so this
+# role changes nothing. It only checks that the clock is disciplined:
+# drift costs a Patroni lease, an etcd leader and a Kerberos ticket, and
+# it is much cheaper to catch here than in the middle of a deployment.
 common_verify_time_sync: true
 common_time_sync_fail: true       # false turns the check into a warning
-
-# --- values used only when the matching toggle is enabled ------------
-common_timezone: Etc/UTC
-common_ntp_servers:
-  - 0.pool.ntp.org
-  - 1.pool.ntp.org
-
-# The per-distribution lists live in vars/<os_family>.yml; add your own
-# packages here instead of editing the base list.
-common_extra_packages: []
-
-# Written to a dedicated /etc/sysctl.d file, never to sysctl.conf.
-common_sysctl_file: /etc/sysctl.d/60-ansible-common.conf
-common_sysctl:
-  vm.swappiness: 1
-  vm.overcommit_memory: 2
-  vm.overcommit_ratio: 90
-  net.ipv4.tcp_keepalive_time: 300
-  net.ipv4.tcp_keepalive_intvl: 30
-  net.ipv4.tcp_keepalive_probes: 5
-  net.core.somaxconn: 4096
-
-# firewalld (RHEL) is managed by every role that opens a port
-manage_firewall: false
-common_firewalld_zone: public

@@ -42,6 +42,21 @@ postgresql_extra_packages: []
 postgresql_locale: en_US.UTF-8
 postgresql_encoding: UTF8
 
+# Kernel tuning for PostgreSQL. Off by default: the OS baseline belongs
+# to the infrastructure team, so this is enabled per environment in
+# group_vars once it is agreed with them. It is written to its own file,
+# never to sysctl.conf.
+postgresql_manage_sysctl: false
+postgresql_sysctl_file: /etc/sysctl.d/60-postgresql.conf
+postgresql_sysctl:
+  vm.swappiness: 1
+  vm.overcommit_memory: 2
+  vm.overcommit_ratio: 90
+  net.ipv4.tcp_keepalive_time: 300
+  net.ipv4.tcp_keepalive_intvl: 30
+  net.ipv4.tcp_keepalive_probes: 5
+  net.core.somaxconn: 4096
+
 # A dedicated file in limits.d - /etc/security/limits.conf belongs to
 # the infrastructure team.
 postgresql_limits_file: /etc/security/limits.d/90-postgresql.conf

@@ -1,4 +1,0 @@
----
-- name: Refresh the apt metadata
-  ansible.builtin.apt:
-    update_cache: true

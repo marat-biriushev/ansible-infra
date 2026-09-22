@@ -15,9 +15,6 @@ manage_firewall: false            # no firewalld rules in dev
 
 # --- corporate mirror -------------------------------------------------
 mirror_base_url: "https://mirror.ipotekabank.uz"
-mirror_manage_os_repos: false
-mirror_manage_epel: false
-
 # Confirmed against a host that is already running: the mirror keeps the
 # upstream layout under /repos/<name>/.
 docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/rhel/$releasever/$basearch/stable"

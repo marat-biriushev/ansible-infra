@@ -21,18 +21,16 @@
    2 балансировщика, ровно один `MASTER` в keepalived), поддерживаемости
    ОС (RHEL 9/10 или Debian), существования `cluster_interface` на
    балансировщиках и наличия секретов;
-2. `mirror` — репозитории на корпоративное зеркало (базовые репозитории
-   ОС не трогаются, пока `mirror_manage_os_repos: false`);
-3. `common` — проверка синхронизации времени (только чтение) и, если
-   явно разрешено в инвентори, sysctl-тюнинг под PostgreSQL; остальную
-   базовую настройку ОС роль не меняет;
-4. `etcd` — бинарники, конфиг, systemd, ожидание healthy-эндпоинта;
-5. `postgresql` — репозиторий PGDG, пакеты, каталоги, лимиты;
-6. `patroni` — venv, конфиг, unit; первым стартует
+2. `common` — проверка синхронизации времени, только чтение; базовую
+   настройку ОС роль не меняет вообще;
+3. `etcd` — бинарники, конфиг, systemd, ожидание healthy-эндпоинта;
+4. `postgresql` — репозиторий PGDG, пакеты, каталоги, лимиты, при явном
+   разрешении — sysctl-тюнинг;
+5. `patroni` — venv, конфиг, unit; первым стартует
    `groups['patroni'][0]` и выполняет bootstrap (initdb), остальные узлы
    поднимаются репликами через `pg_basebackup`;
-7. `haproxy` + `keepalived` — маршрутизация, VIP, SELinux и firewalld;
-8. итоговая сводка с `patronictl list` и строками подключения.
+6. `haproxy` + `keepalived` — маршрутизация, VIP, SELinux и firewalld;
+7. итоговая сводка с `patronictl list` и строками подключения.
 
 Плейбук идемпотентен: повторный прогон не пересоздаёт кластер, а приводит
 конфигурацию к описанной.
@@ -55,8 +53,8 @@ psql "host=<VIP> port=5001 user=postgres" -c "select pg_is_in_recovery();"   # t
 
 | Задача | Команда |
 |---|---|
-| Состояние | `make status ENV=prod` |
-| Плановое переключение | `make switchover ENV=prod CANDIDATE=pg-prod-db-02` |
+| Состояние | `ansible-playbook -i inventories/prod playbooks/patroni_status.yml` |
+| Плановое переключение | `ansible-playbook -i inventories/prod playbooks/patroni_switchover.yml -e candidate=pg-prod-db-02` |
 | Rolling restart | `ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml` |
 | Изменить параметры PostgreSQL | `patronictl -c /etc/patroni/patroni.yml edit-config` |
 | Пересобрать реплику | `patronictl -c /etc/patroni/patroni.yml reinit <scope> <node>` |
@@ -73,11 +71,11 @@ psql "host=<VIP> port=5001 user=postgres" -c "select pg_is_in_recovery();"   # t
   коммита. В тесте выключен.
 * **watchdog.** По умолчанию `off`, так как в VM обычно нет `/dev/watchdog`.
   Если устройство есть — переведите `patroni_watchdog_mode: automatic`.
-* **Чужая зона ответственности.** Роль `common` по умолчанию не меняет
-  ни источник времени, ни `/etc/hosts`, ни пакеты: базовая настройка ОС
+* **Чужая зона ответственности.** Роль `common` ничего не меняет — она
+  только проверяет синхронизацию времени: базовая настройка ОС
   принадлежит команде инфраструктуры. Единственное, что включено в
-  `group_vars/patroni.yml`, — `common_manage_sysctl: true` (тюнинг ядра
-  под PostgreSQL в отдельном файле `/etc/sysctl.d/`). Перед прогоном
+  `group_vars/patroni.yml`, — `postgresql_manage_sysctl: true` (тюнинг
+  ядра под PostgreSQL в отдельном файле `/etc/sysctl.d/`). Перед прогоном
   плейбук проверяет, что часы синхронизированы, и останавливается, если
   нет.
 * **Рестарт Patroni.** Хендлер `Restart patroni` защищён переменной
