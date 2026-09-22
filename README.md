@@ -210,10 +210,66 @@ git push --mirror git@gitlab.corp:infra/ansible.git
   либо положить tar-архивы коллекций в репозиторий и ставить их с
   локального пути. Нужны: `ansible.posix`, `community.general`,
   `community.postgresql`, `ansible.utils` (версии — в `requirements.yml`).
+* **Прогон плейбуков из GitLab.** Стадия `deploy` в `.gitlab-ci.yml` —
+  ручные джобы `ping`, `dry-run` и `run`. Хосты и плейбук выбираются в
+  форме «Run pipeline» (см. раздел ниже).
 * **Vault.** Пароль от vault в репозиторий не кладётся: либо
   `.vault_pass` локально (в `.gitignore`), либо переменная CI
   `ANSIBLE_VAULT_PASSWORD_FILE` в защищённой/маскированной переменной
   GitLab.
+
+## Запуск плейбуков из GitLab CI
+
+Pipeline → **Run pipeline** → форма с полями:
+
+| Переменная | Что задаёт | Пример |
+|---|---|---|
+| `ENVIRONMENT` | инвентори (выпадающий список) | `prod` |
+| `PLAYBOOK` | плейбук (выпадающий список) | `playbooks/playmobile.yml` |
+| `LIMIT` | `--limit` | `playm-prd-01` или `playmobile` |
+| `TAGS` | `--tags` | `docker`, `patroni_config` |
+| `EXTRA_VARS` | `--extra-vars` | `candidate=pg-prod-db-02` |
+
+Дальше в пайплайне три ручные джобы: `ping` (проверка связности),
+`dry-run` (`--check --diff`) и `run` (реальный прогон). Ни одна из них
+не стартует сама — только по кнопке.
+
+Аргументы собирает `ci/run-ansible.sh`: он проверяет, что `ENVIRONMENT`
+из списка `dev|test|prod`, а `PLAYBOOK` лежит в `playbooks/` и
+существует, и передаёт значения одним аргументом (`EXTRA_VARS="a=1 b=2"`
+не разваливается). Скрипт работает и руками:
+
+```bash
+ENVIRONMENT=prod PLAYBOOK=playbooks/playmobile.yml LIMIT=playm-prd-01 \
+  ci/run-ansible.sh check
+```
+
+Ограничители, заложенные в пайплайн:
+
+* `run` для `prod` доступен только с дефолтной ветки;
+* `resource_group: $ENVIRONMENT` — два прогона по одному окружению не
+  пойдут параллельно (для кластера Patroni это критично);
+* `environment: $ENVIRONMENT` — история деплоев на странице Environments,
+  туда же вешаются protected environments и аппрувы (Premium);
+* `interruptible: false` — новый пуш не убьёт идущий деплой;
+* лог прогона (`ANSIBLE_LOG_PATH`) сохраняется артефактом на 30 дней.
+
+Что нужно настроить в проекте (Settings → CI/CD → Variables):
+
+| Переменная | Тип | Назначение |
+|---|---|---|
+| `SSH_PRIVATE_KEY` | File, protected | ключ deploy-пользователя |
+| `ANSIBLE_VAULT_PASSWORD_FILE` | File, protected, masked | пароль ansible-vault |
+| `SSH_KNOWN_HOSTS` | Variable | если задана, включается проверка host key |
+
+И организационно: раннер должен иметь сетевой доступ по SSH до
+172.31.125.0/24 и 172.31.126.0/24 — это к сетевикам. Выпадающие списки
+в форме требуют GitLab 15.7+; на более старой версии поля просто
+вводятся руками, логика не меняется.
+
+Замечание по безопасности: в `ansible.cfg` сейчас
+`host_key_checking = False`. Для контура банка лучше положить
+`SSH_KNOWN_HOSTS` и включить проверку — пайплайн это поддерживает.
 
 ## Разделение зон ответственности
 
