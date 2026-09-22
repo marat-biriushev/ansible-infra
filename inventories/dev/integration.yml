@@ -1,7 +1,7 @@
 ---
 # ===================================================================
 # Integration project - DEV environment
-#   docker : application node (RHEL 10)
+#   playmobile : application node running docker (RHEL 10)
 #
 # There is no database stack in dev yet; add the patroni/etcd/haproxy/
 # keepalived groups here (same layout as inventories/test) when it is
@@ -10,8 +10,8 @@
 all:
   children:
 
-    # --- application nodes running docker -------------------------------
-    docker:
+    # --- playmobile application nodes (docker) --------------------------
+    playmobile:
       hosts:
-        admcn-dev-app01:
+        playm-dev-app01:
           ansible_host: 172.31.125.51

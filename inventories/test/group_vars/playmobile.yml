@@ -1,5 +1,5 @@
 ---
-# --- Docker engine settings for the DEV environment -----------------
+# --- playmobile application nodes - TEST environment -----------------
 docker_insecure_registries:
   - docker-asbt.nexus.otp.ipotekabank.uz
   - docker-proxy.nexus.otp.ipotekabank.uz

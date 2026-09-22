@@ -1,0 +1,18 @@
+---
+# ===================================================================
+# playmobile application nodes: Docker CE from the corporate mirror.
+#
+#   ansible-playbook -i inventories/dev  playbooks/playmobile.yml
+#   ansible-playbook -i inventories/prod playbooks/playmobile.yml --limit playm-prd-01
+# ===================================================================
+- name: Playmobile application nodes
+  hosts: playmobile
+  gather_facts: true
+  tags: [playmobile]
+  roles:
+    - role: mirror
+      tags: [mirror]
+    - role: common
+      tags: [common]
+    - role: docker
+      tags: [docker]

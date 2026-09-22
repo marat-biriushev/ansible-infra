@@ -1,26 +1,26 @@
 ---
 # ===================================================================
 # Integration project - PROD environment
-#   docker  : application nodes (RHEL 10)
-#   patroni : PostgreSQL 18 HA cluster (3 DB nodes + 2 load balancers)
+#   playmobile : application nodes running docker (RHEL 10)
+#   patroni    : PostgreSQL 18 HA cluster (3 DB nodes + 2 load balancers)
 # ===================================================================
 all:
   children:
 
-    # --- application nodes running docker -------------------------------
-    docker:
+    # --- playmobile application nodes (docker) --------------------------
+    playmobile:
       hosts:
-        admcn-prod-app01:
+        playm-prd-01:
           ansible_host: 172.31.126.51
-        admcn-prod-app02:
+        playm-prd-02:
           ansible_host: 172.31.126.52
-        admcn-prod-app03:
+        playm-prd-03:
           ansible_host: 172.31.126.53
-        admcn-prod-app04:
+        playm-prd-04:
           ansible_host: 172.31.126.54
-        admcn-prod-app05:
+        playm-prd-05:
           ansible_host: 172.31.126.55
-        admcn-prod-app06:
+        playm-prd-06:
           ansible_host: 172.31.126.56
 
     pg_cluster:

@@ -13,17 +13,17 @@ requirements.yml             # коллекции ansible-galaxy
 Makefile                     # короткие команды: make patroni ENV=prod
 inventories/
   dev/                       # dev-окружение
-    integration.yml          # хосты проекта integration (docker + БД)
+    integration.yml          # хосты: playmobile (app) + кластер БД
     group_vars/
       all/main.yml           # общие переменные окружения
-      docker.yml             # настройки docker-узлов
+      playmobile.yml         # настройки app-узлов проекта playmobile
     host_vars/
   test/                      # тестовое окружение
     integration.yml
     group_vars/
       all/main.yml
       all/vault.yml.example  # шаблон секретов (vault.yml шифруется ansible-vault)
-      docker.yml
+      playmobile.yml
       patroni.yml            # параметры PostgreSQL/Patroni
       etcd.yml
       haproxy.yml
@@ -32,7 +32,7 @@ inventories/
   prod/                      # продуктивное окружение (та же раскладка)
 playbooks/
   site.yml                   # точка входа для всей инфраструктуры
-  docker.yml                 # установка Docker на app-узлы
+  playmobile.yml             # app-узлы проекта playmobile (Docker)
   patroni_cluster.yml        # развёртывание кластера БД
   patroni_status.yml         # состояние кластера
   patroni_switchover.yml     # плановое переключение лидера
@@ -49,30 +49,28 @@ roles/
 docs/                        # эксплуатационная документация
 ```
 
-## Хосты проекта integration
+## Хосты
 
-| Окружение | docker (app) | БД |
-|---|---|---|
-| dev  | 172.31.125.51 | — |
-| test | 172.31.125.151-154 | 3 + 2 VM (адреса-заглушки) |
-| prod | 172.31.126.51-56 | 3 + 2 VM (адреса-заглушки) |
+Группа `playmobile` — app-узлы одноимённого проекта, RHEL 10.2:
 
-Все app-узлы — RHEL 10.2. Имена (`admcn-<env>-appNN`) взяты по образцу
-`admcn-dev-app01`; переименование не влияет ни на что, кроме читаемости —
-адрес задаётся через `ansible_host`.
+| Окружение | Хосты | Адреса | БД |
+|---|---|---|---|
+| dev  | `playm-dev-app01` | 172.31.125.51 | — |
+| test | `playm-tst-app01…04` | 172.31.125.151-154 | 3 + 2 VM (адреса-заглушки) |
+| prod | `playm-prd-01…06` | 172.31.126.51-56 | 3 + 2 VM (адреса-заглушки) |
 
-## Docker
+## Docker на узлах playmobile
 
 ```bash
-make docker ENV=dev                 # один узел
-make docker ENV=prod LIMIT=admcn-prod-app01
+make playmobile ENV=dev                 # один узел
+make playmobile ENV=prod LIMIT=playm-prd-01
 ```
 
-Роль `docker` кладёт `/etc/yum.repos.d/docker-ce.repo` с
+Роль `docker` (технологическая, переиспользуемая) кладёт `/etc/yum.repos.d/docker-ce.repo` с
 `baseurl=http://mirror.ipotekabank.uz/repos/docker/`, ставит
 `docker-ce`, `docker-ce-cli`, `containerd.io`, buildx и compose-плагины и
 разворачивает `/etc/docker/daemon.json`. Файл собирается из переменных
-(`inventories/<env>/group_vars/docker.yml`), поэтому реестры и пул адресов
+(`inventories/<env>/group_vars/playmobile.yml`), поэтому реестры и пул адресов
 меняются по окружениям без правки роли:
 
 ```json
