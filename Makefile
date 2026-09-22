@@ -12,8 +12,12 @@ ANSIBLE_OPTS = -i $(INV) $(if $(LIMIT),--limit $(LIMIT),) $(if $(TAGS),--tags $(
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-deps: ## Install galaxy collections
-	ansible-galaxy collection install -r requirements.yml
+# Internal ansible-galaxy proxy, e.g.
+#   make deps GALAXY=http://nexus.otp.ipotekabank.uz/repository/ansible-galaxy/
+GALAXY ?=
+
+deps: ## Install galaxy collections (GALAXY=<url> for an internal proxy)
+	ansible-galaxy collection install -r requirements.yml $(if $(GALAXY),-s $(GALAXY),)
 
 lint: ## Run yamllint + ansible-lint
 	yamllint .

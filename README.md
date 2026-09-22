@@ -183,6 +183,38 @@ ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
 
 Если зеркало не раздаёт GPG-ключ PGDG — `postgresql_pgdg_rhel_gpgcheck: false`.
 
+## Перенос в локальный GitLab
+
+Репозиторий самодостаточен: секретов в нём нет (только
+`vault.yml.example` с плейсхолдерами, `.vault_pass` в `.gitignore`), в
+истории коммитов приватных файлов тоже нет.
+
+```bash
+git clone --mirror https://github.com/<...>/ansible-infra.git
+cd ansible-infra.git
+git push --mirror git@gitlab.corp:infra/ansible.git
+```
+
+Что учесть в закрытом контуре:
+
+* **CI.** `.gitlab-ci.yml` уже в репозитории: yamllint, ansible-lint и
+  `--syntax-check` по всем трём инвентори. Образ раннера и индекс pip
+  берутся с зеркала/Nexus через переменные `ANSIBLE_IMAGE`,
+  `PIP_INDEX_URL`, задайте их в настройках проекта, если пути другие.
+  `.github/workflows/lint.yml` на GitLab просто не используется — можно
+  удалить.
+* **Коллекции Galaxy.** `galaxy.ansible.com` из контура недоступен.
+  Варианты: прокси-репозиторий в Nexus
+  (`make deps GALAXY=http://nexus.../repository/ansible-galaxy/` либо
+  раскомментировать секцию `[galaxy_server.internal]` в `ansible.cfg`),
+  либо положить tar-архивы коллекций в репозиторий и ставить их с
+  локального пути. Нужны: `ansible.posix`, `community.general`,
+  `community.postgresql`, `ansible.utils` (версии — в `requirements.yml`).
+* **Vault.** Пароль от vault в репозиторий не кладётся: либо
+  `.vault_pass` локально (в `.gitignore`), либо переменная CI
+  `ANSIBLE_VAULT_PASSWORD_FILE` в защищённой/маскированной переменной
+  GitLab.
+
 ## Разделение зон ответственности
 
 Базовую настройку ОС (источник времени, параметры ядра, `/etc/hosts`,

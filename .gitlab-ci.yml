@@ -1,0 +1,49 @@
+---
+# ===================================================================
+# Pipeline for the internal GitLab.
+#
+# Both the runner image and the Python/Galaxy indexes come from the
+# corporate mirror, so the job never reaches out to the internet.
+# Override the variables below in the project CI/CD settings if the
+# paths on the mirror differ.
+# ===================================================================
+variables:
+  ANSIBLE_IMAGE: "docker-proxy.nexus.otp.ipotekabank.uz/python:3.12-slim"
+  PIP_INDEX_URL: "http://mirror.ipotekabank.uz/pypi/simple"
+  PIP_TRUSTED_HOST: "mirror.ipotekabank.uz"
+  # Internal ansible-galaxy proxy; leave empty to skip the collection
+  # install and lint with whatever the image already carries.
+  GALAXY_SERVER_URL: ""
+  ANSIBLE_FORCE_COLOR: "1"
+
+default:
+  image: "$ANSIBLE_IMAGE"
+  before_script:
+    - pip install --quiet "ansible-core>=2.15" ansible-lint yamllint
+    - |
+      if [ -n "$GALAXY_SERVER_URL" ]; then
+        ansible-galaxy collection install -r requirements.yml -s "$GALAXY_SERVER_URL"
+      fi
+
+stages:
+  - lint
+  - verify
+
+yamllint:
+  stage: lint
+  script:
+    - yamllint .
+
+ansible-lint:
+  stage: lint
+  script:
+    - ansible-lint
+
+syntax:
+  stage: verify
+  script:
+    - |
+      for env in dev test prod; do
+        echo "== $env"
+        ansible-playbook -i "inventories/$env" playbooks/site.yml --syntax-check
+      done
