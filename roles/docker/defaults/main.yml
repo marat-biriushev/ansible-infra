@@ -1,19 +1,22 @@
 ---
 # --- repository ------------------------------------------------------
-# The corporate mirror serves a flat Docker CE repository; the upstream
-# layout (download.docker.com/linux/rhel/$releasever/$basearch/stable)
-# works too - only this URL changes.
+# Defaults point at upstream; the inventories point them at the mirror,
+# which keeps the same layout under /repos/docker/.
 docker_manage_repository: true
-docker_repo_name: docker-ce
-docker_repo_description: "Docker CE"
-docker_repo_baseurl: "https://download.docker.com/linux/rhel/$releasever/$basearch/stable"
 docker_repo_file: /etc/yum.repos.d/docker-ce.repo
-# Mirrored repositories often do not carry the upstream signing key;
-# set docker_repo_gpgcheck: true together with docker_repo_gpgkey once
-# the key is published on the mirror.
+docker_repo_name: docker-ce-stable
+docker_repo_description: "Docker CE Stable"
+docker_repo_baseurl: "https://download.docker.com/linux/rhel/$releasever/$basearch/stable"
+docker_repo_gpgkey: "https://download.docker.com/linux/rhel/gpg"
+# Signature checking is off to match the repository file the hosts are
+# already running with; the key is published, so flipping both flags to
+# true is all it takes to turn it on.
 docker_repo_gpgcheck: false
-docker_repo_gpgkey: ""
-docker_repo_module_hotfixes: true
+docker_repo_repo_gpgcheck: false
+docker_repo_metadata_expire: "6h"
+# Needed on RHEL 9, where the container-tools module collides with
+# containerd.io. RHEL 10 has no modularity, so it is off by default.
+docker_repo_module_hotfixes: false
 
 # --- packages --------------------------------------------------------
 docker_packages:

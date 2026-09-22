@@ -20,17 +20,20 @@ manage_firewall: true             # firewalld rules are managed by the roles
 # --- corporate mirror -------------------------------------------------
 # Everything the playbooks download comes from here: PGDG packages, the
 # etcd release archive and the Python wheels for the Patroni virtualenv.
-mirror_base_url: "http://mirror.ipotekabank.uz"
+mirror_base_url: "https://mirror.ipotekabank.uz"
 
 # Base OS repositories. The VMs normally already point at the mirror, so
 # Ansible does not touch BaseOS/AppStream (or sources.list) unless asked.
 mirror_manage_os_repos: false
 mirror_manage_epel: false
 
-# The /repos/<name>/ layout is confirmed for docker; the other paths
-# follow the same convention - check them against the mirror and adjust
-# here (the roles themselves need no change).
-docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/"
+# Confirmed against a host that is already running: the mirror keeps the
+# upstream layout under /repos/<name>/. The paths below follow the same
+# convention but are NOT yet verified - check them and adjust here, the
+# roles need no change.
+docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/rhel/$releasever/$basearch/stable"
+docker_repo_gpgkey: "{{ mirror_base_url }}/repos/docker/gpg/docker-rpm.gpg"
+docker_repo_description: "Docker CE Stable - Local Mirror"
 
 postgresql_pgdg_rhel_baseurl: >-
   {{ mirror_base_url }}/repos/pgdg/{{ postgresql_version }}/redhat/rhel-$releasever-$basearch
@@ -44,10 +47,7 @@ etcd_download_base_url: "{{ mirror_base_url }}/repos/etcd"
 # Python wheels for the Patroni virtualenv. Passed to pip for that venv
 # only - /etc/pip.conf is left to the infrastructure team.
 mirror_pypi_index_url: "{{ mirror_base_url }}/pypi/simple"
-mirror_pypi_trusted_host: "mirror.ipotekabank.uz"
-patroni_pip_extra_args: >-
-  --index-url {{ mirror_pypi_index_url }}
-  --trusted-host {{ mirror_pypi_trusted_host }}
+patroni_pip_extra_args: "--index-url {{ mirror_pypi_index_url }}"
 
 # --- access (FreeIPA) -------------------------------------------------
 # The hosts are enrolled in IPA, so SSH authentication goes through

@@ -4,9 +4,11 @@ name={{ docker_repo_description }}
 baseurl={{ docker_repo_baseurl }}
 enabled=1
 gpgcheck={{ docker_repo_gpgcheck | ternary(1, 0) }}
-{% if docker_repo_gpgcheck and docker_repo_gpgkey | length > 0 %}
+repo_gpgcheck={{ docker_repo_repo_gpgcheck | ternary(1, 0) }}
+{% if docker_repo_gpgkey | length > 0 %}
 gpgkey={{ docker_repo_gpgkey }}
 {% endif %}
+metadata_expire={{ docker_repo_metadata_expire }}
 {% if docker_repo_module_hotfixes %}
 module_hotfixes=true
 {% endif %}

@@ -14,12 +14,19 @@ common_verify_time_sync: true     # read-only check, changes nothing
 manage_firewall: false            # no firewalld rules in dev
 
 # --- corporate mirror -------------------------------------------------
-mirror_base_url: "http://mirror.ipotekabank.uz"
+mirror_base_url: "https://mirror.ipotekabank.uz"
 mirror_manage_os_repos: false
 mirror_manage_epel: false
 
-# Docker packages, confirmed layout on the mirror
-docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/"
+# Confirmed against a host that is already running: the mirror keeps the
+# upstream layout under /repos/<name>/.
+docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/rhel/$releasever/$basearch/stable"
+docker_repo_gpgkey: "{{ mirror_base_url }}/repos/docker/gpg/docker-rpm.gpg"
+docker_repo_description: "Docker CE Stable - Local Mirror"
+
+# This environment has no database stack yet, so the PGDG/etcd/pypi
+# paths live only in the test and prod inventories - copy them over
+# together with the groups if a cluster is added here.
 
 # --- access (FreeIPA) -------------------------------------------------
 # The hosts are enrolled in IPA, so SSH authentication goes through

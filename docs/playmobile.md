@@ -25,10 +25,23 @@ make play ENV=prod PLAYBOOK=playbooks/playmobile.yml LIMIT=playm-prd-01
 
 ## Что делает роль
 
-1. `/etc/yum.repos.d/docker-ce.repo` с
-   `baseurl={{ docker_repo_baseurl }}` (по умолчанию
-   `http://mirror.ipotekabank.uz/repos/docker/`) и `module_hotfixes=true`
-   — без него `containerd.io` на RHEL не ставится.
+1. `/etc/yum.repos.d/docker-ce.repo` — повторяет файл, с которым узлы
+   уже работают:
+
+```ini
+[docker-ce-stable]
+name=Docker CE Stable - Local Mirror
+baseurl=https://mirror.ipotekabank.uz/repos/docker/rhel/$releasever/$basearch/stable
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+gpgkey=https://mirror.ipotekabank.uz/repos/docker/gpg/docker-rpm.gpg
+metadata_expire=6h
+```
+
+   Плюс строка-маркер `# Ansible managed` сверху. Все значения —
+   переменные (`docker_repo_baseurl`, `docker_repo_gpgkey`,
+   `docker_repo_description`, `docker_repo_metadata_expire`).
 2. Пакеты: `docker-ce`, `docker-ce-cli`, `containerd.io`,
    `docker-buildx-plugin`, `docker-compose-plugin`.
 3. `/etc/docker/daemon.json` — собирается из переменных
@@ -54,8 +67,15 @@ make play ENV=prod PLAYBOOK=playbooks/playmobile.yml LIMIT=playm-prd-01
   сохраняется рядом (`backup: true`). Битый конфиг не уронит демон.
 * **Рестарт.** Демон перезапускается только при реальном изменении
   `daemon.json` (handler), а не на каждом прогоне.
-* **GPG.** `docker_repo_gpgcheck: false` — на плоском зеркале обычно нет
-  ключа. Включается вместе с `docker_repo_gpgkey`.
+* **GPG.** `gpgcheck=0` и `repo_gpgcheck=0` — как в файле, который уже
+  работает на узлах. Ключ при этом на зеркале лежит и прописан в репо,
+  так что включение проверки — это `docker_repo_gpgcheck: true` и
+  `docker_repo_repo_gpgcheck: true`, без других правок. Стоит включить,
+  когда будет время проверить подписи пакетов на зеркале.
+* **module_hotfixes.** Выключен — в рабочем файле на RHEL 10 его нет, и
+  модульности там больше не существует. Если узлы на RHEL 9 и dnf
+  ругается на конфликт `containerd.io` с модулем `container-tools`,
+  включите `docker_repo_module_hotfixes: true`.
 * **podman.** Удаление конфликтующих пакетов выключено
   (`docker_remove_conflicting_packages: false`). Включите, если на
   app-узлах podman не нужен.
