@@ -7,7 +7,7 @@ EXTRA ?=
 
 ANSIBLE_OPTS = -i $(INV) $(if $(LIMIT),--limit $(LIMIT),) $(if $(TAGS),--tags $(TAGS),) $(EXTRA)
 
-.PHONY: help deps lint syntax ping check patroni haproxy playmobile site switchover status
+.PHONY: help deps lint syntax ping play check patroni haproxy playmobile site switchover status
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -28,6 +28,10 @@ syntax: ## Syntax check all playbooks
 
 ping: ## Check connectivity
 	ansible $(ANSIBLE_OPTS) all -m ping
+
+play: ## Run any playbook: make play ENV=prod PLAYBOOK=playbooks/x.yml [LIMIT=] [TAGS=] [CHECK=1]
+	@test -n "$(PLAYBOOK)" || { echo "PLAYBOOK is required, e.g. PLAYBOOK=playbooks/site.yml"; exit 2; }
+	ansible-playbook $(ANSIBLE_OPTS) $(PLAYBOOK) $(if $(CHECK),--check --diff,)
 
 check: ## Dry-run the patroni cluster playbook
 	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_cluster.yml --check --diff

@@ -1,357 +1,204 @@
 # ansible
 
-Ansible-репозиторий для всей инфраструктуры: раздельные инвентори по окружениям,
-роли вынесены отдельно, плейбуки — отдельно.
+Infrastructure repository: one place for every stack we run, with
+separate inventories per environment, reusable roles and one playbook per
+project.
 
-Первый стек — отказоустойчивый кластер PostgreSQL 18 под управлением Patroni 4.1.x.
-
-## Структура
+## Layout
 
 ```
-ansible.cfg                  # настройки по умолчанию (inventory = test)
-requirements.yml             # коллекции ansible-galaxy
-Makefile                     # короткие команды: make patroni ENV=prod
+ansible.cfg                  # defaults (inventory = test)
+requirements.yml             # galaxy collections
+Makefile                     # shortcuts: make play ENV=prod PLAYBOOK=...
 inventories/
-  dev/                       # dev-окружение
-    integration.yml          # хосты: playmobile (app) + кластер БД
+  dev/ test/ prod/           # one directory per environment
+    <project>.yml            # hosts of a project, grouped by role in it
     group_vars/
-      all/main.yml           # общие переменные окружения
-      playmobile.yml         # настройки app-узлов проекта playmobile
+      all/main.yml           # environment-wide settings and versions
+      all/vault.yml.example  # template for the encrypted secrets
+      <group>.yml            # settings of one inventory group
     host_vars/
-  test/                      # тестовое окружение
-    integration.yml
-    group_vars/
-      all/main.yml
-      all/vault.yml.example  # шаблон секретов (vault.yml шифруется ansible-vault)
-      playmobile.yml
-      patroni.yml            # параметры PostgreSQL/Patroni
-      etcd.yml
-      haproxy.yml
-      keepalived.yml
-    host_vars/
-  prod/                      # продуктивное окружение (та же раскладка)
 playbooks/
-  site.yml                   # точка входа для всей инфраструктуры
-  playmobile.yml             # app-узлы проекта playmobile (Docker)
-  patroni_cluster.yml        # развёртывание кластера БД
-  patroni_status.yml         # состояние кластера
-  patroni_switchover.yml     # плановое переключение лидера
-  patroni_rolling_restart.yml
+  site.yml                   # imports every project playbook
+  <project>.yml              # one project, built from roles
 roles/
-  mirror/                    # репозитории и pip через корпоративное зеркало
-  common/                    # базовая настройка ОС
-  docker/                    # Docker CE + /etc/docker/daemon.json
-  etcd/                      # etcd v3 (DCS для Patroni)
-  postgresql/                # пакеты PostgreSQL 18 из PGDG
-  patroni/                   # Patroni 4.1.x в venv + systemd
-  haproxy/                   # маршрутизация rw/ro
-  keepalived/                # VRRP VIP перед парой HAProxy
-docs/                        # эксплуатационная документация
+  <technology>/              # reusable, named after what it installs
+docs/
+  <project>.md               # how a stack is deployed and operated
 ```
 
-## Хосты
+Directories `files/`, `library/` and `filter_plugins/` are placeholders
+for shared artefacts, custom modules and custom filters.
 
-Группа `playmobile` — app-узлы одноимённого проекта, RHEL 10.2:
+## Conventions
 
-| Окружение | Хосты | Адреса | БД |
-|---|---|---|---|
-| dev  | `playm-dev-app01` | 172.31.125.51 | — |
-| test | `playm-tst-app01…04` | 172.31.125.151-154 | 3 + 2 VM (адреса-заглушки) |
-| prod | `playm-prd-01…06` | 172.31.126.51-56 | 3 + 2 VM (адреса-заглушки) |
+* **Environments are separate inventories.** `dev`, `test` and `prod`
+  never share a file; the same playbook is run against a different `-i`.
+* **Inventory files are named after the project**, not after a host
+  class, and hold every group that project needs. One project may
+  contain several groups (application nodes, database nodes, load
+  balancers).
+* **Roles are named after the technology** they install (`docker`,
+  `postgresql`, `patroni`, `haproxy`) and stay reusable: nothing inside a
+  role refers to a project. The binding between a project and the roles
+  it uses lives in `playbooks/<project>.yml`.
+* **A value is defined once.** Versions, ports, mirror paths and network
+  ranges live in `inventories/<env>/group_vars/all/main.yml` and are
+  referenced everywhere else; role defaults only provide a working
+  fallback for a role used outside this repository.
+* **Secrets never enter the repository.** Only `vault.yml.example` with
+  placeholders is committed; the real `vault.yml` is encrypted with
+  `ansible-vault` and the password stays out of git.
+* **The OS baseline is not ours.** See *Separation of duties* below.
+* **Every change is linted before it is committed**: `make lint` and
+  `make syntax`.
 
-## Docker на узлах playmobile
+## Running playbooks
 
 ```bash
-make playmobile ENV=dev                 # один узел
-make playmobile ENV=prod LIMIT=playm-prd-01
+make deps                                  # galaxy collections
+make ping  ENV=test                        # connectivity
+make lint                                  # yamllint + ansible-lint
+make syntax ENV=test                       # --syntax-check
+
+make play ENV=test PLAYBOOK=playbooks/<project>.yml CHECK=1   # dry run
+make play ENV=test PLAYBOOK=playbooks/<project>.yml           # apply
+make play ENV=prod PLAYBOOK=playbooks/<project>.yml LIMIT=host1 TAGS=config
 ```
 
-Плейбук `playmobile.yml` намеренно состоит из одной роли `docker` —
-базовую настройку ОС на этих узлах делает команда инфраструктуры.
-Роль `docker` (технологическая, переиспользуемая) кладёт `/etc/yum.repos.d/docker-ce.repo` с
-`baseurl=http://mirror.ipotekabank.uz/repos/docker/`, ставит
-`docker-ce`, `docker-ce-cli`, `containerd.io`, buildx и compose-плагины и
-разворачивает `/etc/docker/daemon.json`. Файл собирается из переменных
-(`inventories/<env>/group_vars/playmobile.yml`), поэтому реестры и пул адресов
-меняются по окружениям без правки роли:
-
-```json
-{
-    "log-driver": "json-file",
-    "log-opts": {"max-size": "100m", "max-file": "3"},
-    "insecure-registries": ["docker-asbt.nexus.otp.ipotekabank.uz",
-                            "docker-proxy.nexus.otp.ipotekabank.uz"],
-    "live-restore": true,
-    "default-address-pools": [{"base": "100.100.0.0/16", "size": 24}]
-}
-```
-
-Перед записью файл проверяется `dockerd --validate --config-file`, старая
-версия сохраняется рядом (`backup: true`), демон перезапускается только
-при реальном изменении. `gpgcheck` для репозитория выключен
-(`docker_repo_gpgcheck: false`) — включите вместе с `docker_repo_gpgkey`,
-когда на зеркале появится ключ.
-
-## Топология стека БД
-
-| Группа       | Кол-во | Роли на узле                          |
-|--------------|--------|---------------------------------------|
-| `patroni`    | 3 VM   | etcd + PostgreSQL 18 + Patroni 4.1.x  |
-| `etcd`       | те же 3 VM | кворум DCS                        |
-| `haproxy`    | 2 VM   | HAProxy                               |
-| `keepalived` | те же 2 VM | VRRP VIP                          |
-
-Точки подключения (через VIP):
-
-| Порт   | Назначение                                |
-|--------|-------------------------------------------|
-| `5000` | read/write — всегда текущий лидер          |
-| `5001` | read-only — живые реплики (round-robin)    |
-| `7000` | статистика HAProxy (`/stats`)              |
-| `8008` | Patroni REST API на узлах БД               |
-
-## Быстрый старт
+Without the Makefile it is the usual invocation:
 
 ```bash
-# 1. зависимости
-make deps                       # ansible-galaxy collection install -r requirements.yml
+ansible-playbook -i inventories/prod playbooks/<project>.yml \
+  --limit <host-or-group> --tags <tags> --check --diff
+```
 
-# 2. секреты окружения
+`--check --diff` first is the habit worth keeping: it prints what would
+change without changing it.
+
+## Adding a project
+
+1. `inventories/<env>/<project>.yml` - the hosts, in groups named after
+   their function in the project.
+2. `inventories/<env>/group_vars/<group>.yml` - the settings of that
+   group; anything shared by the whole environment goes to
+   `group_vars/all/main.yml`.
+3. `roles/<technology>/` - a new role only if no existing one installs
+   that software; keep it free of project-specific names.
+4. `playbooks/<project>.yml` - binds the groups to the roles.
+5. Import it from `playbooks/site.yml`.
+6. `docs/<project>.md` - what it deploys, how it is operated, what is
+   specific about it.
+7. `make lint && make syntax ENV=<env>` before committing.
+
+## Secrets
+
+```bash
 cp inventories/test/group_vars/all/vault.yml.example \
    inventories/test/group_vars/all/vault.yml
 $EDITOR inventories/test/group_vars/all/vault.yml
 ansible-vault encrypt inventories/test/group_vars/all/vault.yml
-echo 'пароль-от-vault' > .vault_pass && chmod 600 .vault_pass   # файл в .gitignore
+echo 'vault-password' > .vault_pass && chmod 600 .vault_pass  # gitignored
+export ANSIBLE_VAULT_PASSWORD_FILE=.vault_pass
+```
 
-# 3. проверка связности и синтаксиса
+Roles carry deliberately non-working placeholder passwords, so a missing
+vault fails loudly instead of deploying something with a default
+password.
+
+## Corporate mirror
+
+Everything the playbooks download comes from the internal mirror, set per
+environment in `group_vars/all/main.yml`:
+
+| Variable | What it points at |
+|---|---|
+| `mirror_base_url` | the mirror itself |
+| `docker_repo_baseurl` | Docker CE repository |
+| `postgresql_pgdg_rhel_baseurl` | PGDG for the RHEL family |
+| `postgresql_pgdg_repo_url` | PGDG for the Debian family |
+| `etcd_download_base_url` | etcd release archives |
+| `mirror_pypi_index_url` | Python wheels |
+
+The `mirror` role can also repoint the base OS repositories
+(`mirror_manage_os_repos`, off by default - the images normally already
+come from the mirror).
+
+`galaxy.ansible.com` is not reachable from the network either: install
+the collections from an internal Galaxy proxy
+(`make deps GALAXY=<url>`, or the commented `[galaxy_server.internal]`
+section in `ansible.cfg`), or vendor the tarballs.
+
+## Access
+
+Hosts are enrolled in FreeIPA, so SSH authenticates through Kerberos and
+the sudo rule comes from IPA:
+
+```bash
+kinit <your-principal>
 make ping ENV=test
-make syntax ENV=test
-make lint
-
-# 4. прогон вхолостую и развёртывание
-make check ENV=test
-make patroni ENV=test
 ```
 
-Для прода: `make patroni ENV=prod` (инвентори `inventories/prod`).
+`ansible.cfg` passes `-o GSSAPIAuthentication=yes`; do not put
+`PreferredAuthentications=publickey` back, it disables Kerberos. A
+Kerberos login also needs the clock within the 5 minute skew - the
+`common` role checks that before anything is deployed.
 
-## Эксплуатация
+Per-environment settings that depend on how IPA is configured
+(`ansible_user`, `ansible_become_password` when the sudo rule is not
+NOPASSWD, `VerifyHostKeyDNS` for the SSHFP records IPA publishes) are
+prepared, commented, in `group_vars/all/main.yml`.
 
-```bash
-make status ENV=prod                              # patronictl list + show-config
-make switchover ENV=prod CANDIDATE=pg-prod-db-02  # плановое переключение
-make haproxy ENV=prod                             # только балансировщики
-ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
-```
+`host_key_checking` is currently `False` in `ansible.cfg`. With IPA
+publishing SSHFP records it is worth turning on.
 
-Подробности — в [docs/patroni-cluster.md](docs/patroni-cluster.md).
+## Separation of duties
 
-## Требования
+The infrastructure team owns the OS baseline of these machines, so the
+`common` role changes nothing by default:
 
-* Ansible core >= 2.15 на управляющей машине, Python 3 на целевых узлах.
-* Целевые ОС: **RHEL 9 и RHEL 10** (основная платформа), Debian 12 / Ubuntu 22.04+
-  поддерживаются тем же кодом.
-* Доступ по SSH с sudo без пароля (либо `--ask-become-pass`).
-* Сетевая доступность между узлами: 5432, 8008 (Patroni), 2379/2380 (etcd),
-  5000/5001/7000 (HAProxy), VRRP (протокол 112) между балансировщиками.
-  На RHEL правила firewalld расставляют сами роли при `manage_firewall: true`.
-
-## Корпоративное зеркало
-
-Всё, что плейбуки скачивают, идёт через `http://mirror.ipotekabank.uz`
-(роль `mirror` + переменные в `group_vars/all/main.yml`):
-
-| Что | Переменная | Путь по умолчанию |
+| Area | Variable | Default |
 |---|---|---|
-| Docker CE | `docker_repo_baseurl` | `/repos/docker/` (подтверждено) |
-| PGDG для RHEL | `postgresql_pgdg_rhel_baseurl` | `/postgresql/repos/yum/18/redhat/rhel-$releasever-$basearch` |
-| PGDG для Debian | `postgresql_pgdg_repo_url` | `/postgresql/repos/apt` |
-| Архив etcd | `etcd_download_base_url` | `/etcd/v3.5.17/etcd-v3.5.17-linux-amd64.tar.gz` |
-| Python-колёса | `mirror_pypi_index_url` | `/pypi/simple` (пишется в `/etc/pip.conf`) |
-| BaseOS/AppStream | `mirror_rhel_*_url` | `/rhel/$releasever/{BaseOS,AppStream}/$basearch/os` |
-| sources.list | `mirror_debian_url` | `/debian`, `/debian-security` |
-
-Подтверждён только путь docker (`/repos/<name>/`), остальные приведены к
-той же схеме, но их стоит сверить: если раскладка другая, поправьте
-переменные в `inventories/<env>/group_vars/all/main.yml`, менять роли не нужно.
-
-Базовые репозитории ОС по умолчанию **не трогаются**
-(`mirror_manage_os_repos: false`) — обычно образы VM уже настроены на
-зеркало. Поставьте `true`, если хотите, чтобы Ansible владел
-`/etc/yum.repos.d` (старые `.repo` переименовываются в `*.repo.disabled`)
-или `/etc/apt/sources.list` (оригинал сохраняется рядом).
-
-Если зеркало не раздаёт GPG-ключ PGDG — `postgresql_pgdg_rhel_gpgcheck: false`.
-
-## Перенос в локальный GitLab
-
-Репозиторий самодостаточен: секретов в нём нет (только
-`vault.yml.example` с плейсхолдерами, `.vault_pass` в `.gitignore`), в
-истории коммитов приватных файлов тоже нет.
-
-```bash
-git clone --mirror https://github.com/<...>/ansible-infra.git
-cd ansible-infra.git
-git push --mirror git@gitlab.corp:infra/ansible.git
-```
-
-Что учесть в закрытом контуре:
-
-* **CI.** `.gitlab-ci.yml` уже в репозитории: yamllint, ansible-lint и
-  `--syntax-check` по всем трём инвентори. Образ раннера и индекс pip
-  берутся с зеркала/Nexus через переменные `ANSIBLE_IMAGE`,
-  `PIP_INDEX_URL`, задайте их в настройках проекта, если пути другие.
-  `.github/workflows/lint.yml` на GitLab просто не используется — можно
-  удалить.
-* **Коллекции Galaxy.** `galaxy.ansible.com` из контура недоступен.
-  Варианты: прокси-репозиторий в Nexus
-  (`make deps GALAXY=http://nexus.../repository/ansible-galaxy/` либо
-  раскомментировать секцию `[galaxy_server.internal]` в `ansible.cfg`),
-  либо положить tar-архивы коллекций в репозиторий и ставить их с
-  локального пути. Нужны: `ansible.posix`, `community.general`,
-  `community.postgresql`, `ansible.utils` (версии — в `requirements.yml`).
-* **Прогон плейбуков из GitLab.** Стадия `deploy` в `.gitlab-ci.yml` —
-  ручные джобы `ping`, `dry-run` и `run`. Хосты и плейбук выбираются в
-  форме «Run pipeline» (см. раздел ниже).
-* **Vault.** Пароль от vault в репозиторий не кладётся: либо
-  `.vault_pass` локально (в `.gitignore`), либо переменная CI
-  `ANSIBLE_VAULT_PASSWORD_FILE` в защищённой/маскированной переменной
-  GitLab.
-
-## Запуск плейбуков из GitLab CI
-
-Pipeline → **Run pipeline** → форма с полями:
-
-| Переменная | Что задаёт | Пример |
-|---|---|---|
-| `ENVIRONMENT` | инвентори (выпадающий список) | `prod` |
-| `PLAYBOOK` | плейбук (выпадающий список) | `playbooks/playmobile.yml` |
-| `LIMIT` | `--limit` | `playm-prd-01` или `playmobile` |
-| `TAGS` | `--tags` | `docker`, `patroni_config` |
-| `EXTRA_VARS` | `--extra-vars` | `candidate=pg-prod-db-02` |
-
-Дальше в пайплайне три ручные джобы: `ping` (проверка связности),
-`dry-run` (`--check --diff`) и `run` (реальный прогон). Ни одна из них
-не стартует сама — только по кнопке.
-
-Аргументы собирает `ci/run-ansible.sh`: он проверяет, что `ENVIRONMENT`
-из списка `dev|test|prod`, а `PLAYBOOK` лежит в `playbooks/` и
-существует, и передаёт значения одним аргументом (`EXTRA_VARS="a=1 b=2"`
-не разваливается). Скрипт работает и руками:
-
-```bash
-ENVIRONMENT=prod PLAYBOOK=playbooks/playmobile.yml LIMIT=playm-prd-01 \
-  ci/run-ansible.sh check
-```
-
-Ограничители, заложенные в пайплайн:
-
-* `run` для `prod` доступен только с дефолтной ветки;
-* `resource_group: $ENVIRONMENT` — два прогона по одному окружению не
-  пойдут параллельно (для кластера Patroni это критично);
-* `environment: $ENVIRONMENT` — история деплоев на странице Environments,
-  туда же вешаются protected environments и аппрувы (Premium);
-* `interruptible: false` — новый пуш не убьёт идущий деплой;
-* лог прогона (`ANSIBLE_LOG_PATH`) сохраняется артефактом на 30 дней.
-
-Что нужно настроить в проекте (Settings → CI/CD → Variables):
-
-| Переменная | Тип | Назначение |
-|---|---|---|
-| `KRB5_KEYTAB` | File, protected | keytab сервисного принципала IPA |
-| `KRB5_PRINCIPAL` | Variable | `svc-ansible@IPOTEKABANK.UZ` |
-| `SSH_PRIVATE_KEY` | File, protected | альтернатива IPA — обычный ключ |
-| `ANSIBLE_VAULT_PASSWORD_FILE` | File, protected | пароль ansible-vault |
-| `SSH_KNOWN_HOSTS` | Variable | если задана, включается проверка host key |
-
-Аутентификацию настраивает `ci/setup-auth.sh` (подключается через
-`.`, а не запускается): есть `KRB5_KEYTAB` — делает `kinit`, иначе
-поднимает ssh-agent с ключом, а если не задано ни то ни другое — джоба
-падает с внятным сообщением, а не с «Permission denied» из ansible.
-
-Выпадающие списки в форме требуют GitLab 15.7+; на более старой версии
-поля вводятся руками, логика та же.
-
-## Доступ через FreeIPA
-
-Узлы заведены в IPA, поэтому SSH идёт по Kerberos (GSSAPI), а правило
-sudo приезжает из IPA. Что для этого сделано и что нужно от вас:
-
-* **`ansible.cfg`.** Из `ssh_args` убран `PreferredAuthentications=publickey`
-  — он полностью блокировал GSSAPI. Теперь там
-  `-o GSSAPIAuthentication=yes -o GSSAPIDelegateCredentials=no`: есть
-  тикет — идёт Kerberos, нет — обычный ключ, оба сценария работают.
-* **Принципал.** Нужен сервисный аккаунт (например `svc-ansible`) с
-  keytab и правом sudo на нужные hostgroup'ы IPA. Keytab кладётся в
-  переменную типа File, `kinit -kt` выполняется в начале джобы, тикет
-  живёт в `$CI_PROJECT_DIR/.krb5cc` и исчезает вместе с workspace.
-* **sudo.** Если правило IPA не NOPASSWD, CI-джоба не сможет ответить на
-  запрос пароля. Либо просите NOPASSWD для этого аккаунта, либо кладите
-  `ansible_become_password` в vault — заготовка в `group_vars/all/main.yml`.
-* **Сеть и время.** Раннеру нужен доступ до KDC (88/tcp+udp, 464) и до
-  SSH-портов подсетей 172.31.125.0/24 и 172.31.126.0/24, а расхождение
-  часов больше 5 минут ломает Kerberos — проверка времени, которая уже
-  встроена в роль `common`, отловит это заранее.
-* **Host keys.** IPA публикует SSHFP-записи в DNS, поэтому вместо
-  `known_hosts` можно включить
-  `ansible_ssh_common_args: "-o VerifyHostKeyDNS=yes"` (заготовка там же)
-  и поднять `host_key_checking = True` в `ansible.cfg`. Сейчас проверка
-  выключена — это осознанный дефолт для первого запуска, но для контура
-  банка её стоит включить.
-* **Образ раннера.** Нужен клиент Kerberos: `krb5-user` (Debian) или
-  `krb5-workstation` (RHEL) плюс `openssh-client`. Быстрее собрать свой
-  образ в Nexus с ansible-core, коллекциями и krb5 внутри.
-
-## Разделение зон ответственности
-
-Базовую настройку ОС (источник времени, параметры ядра, `/etc/hosts`,
-базовый набор пакетов) держит команда инфраструктуры, поэтому роль
-`common` по умолчанию **не меняет ничего**:
-
-| Область | Переменная | По умолчанию |
-|---|---|---|
-| пакеты | `common_manage_packages` | `false` |
-| таймзона | `common_manage_timezone` | `false` |
-| chrony/NTP | `common_manage_chrony` | `false` |
+| packages | `common_manage_packages` | `false` |
+| timezone | `common_manage_timezone` | `false` |
+| chrony / NTP | `common_manage_chrony` | `false` |
 | sysctl | `common_manage_sysctl` | `false` |
 | `/etc/hosts` | `common_manage_hosts_file` | `false` |
-| проверка времени | `common_verify_time_sync` | `true` (только чтение) |
+| clock check | `common_verify_time_sync` | `true`, read-only |
 
-Вместо настройки времени роль его **проверяет**: `timedatectl` +
-`chronyc tracking`, и падает с понятным сообщением, если часы не
-синхронизированы (расхождение времени рвёт lease Patroni и выборы лидера
-в etcd). Проверка отключается `-e common_verify_time_sync=false`, а
-строгость — `-e common_time_sync_fail=false`.
+Instead of configuring time, the role verifies it (`timedatectl` plus
+`chronyc tracking`) and stops with an explanation when the clock is not
+disciplined - drift costs a Patroni lease, an etcd leader and a Kerberos
+ticket. Disable with `-e common_verify_time_sync=false`, downgrade to a
+warning with `-e common_time_sync_fail=false`.
 
-Плейбук `playmobile.yml` роль `common` не подключает вообще: на app-узлах
-он ставит только docker-репозиторий, пакеты и `daemon.json`.
+When a stack really needs a baseline change, it is enabled explicitly in
+the inventory where a reviewer sees it - as `common_manage_sysctl: true`
+in `group_vars/patroni.yml`, which is PostgreSQL kernel tuning written to
+a dedicated file in `/etc/sysctl.d/`.
 
-Единственное исключение — `common_manage_sysctl: true` в
-`group_vars/patroni.yml`: тюнинг ядра под PostgreSQL. Он объявлен явно в
-инвентори, пишется в отдельный `/etc/sysctl.d/60-ansible-common.conf` и
-снимается одной строкой.
+The same rule applies everywhere else: changes go to a dedicated file
+rather than a shared one (`/etc/security/limits.d/90-postgresql.conf`,
+not `limits.conf`), tools are installed by the role that needs them
+rather than by a shared package list, the pip index is passed to the one
+virtualenv that needs it rather than written to `/etc/pip.conf`, and
+anything that does touch a shared file keeps a backup.
 
-Что ещё не трогается:
+## Requirements
 
-* лимиты для `postgres` пишутся в `/etc/security/limits.d/90-postgresql.conf`,
-  а не в общий `limits.conf`;
-* индекс PyPI передаётся прямо в `pip` при создании venv Patroni
-  (`patroni_pip_extra_args`), общий `/etc/pip.conf` не создаётся
-  (`mirror_manage_pip_config: false`);
-* базовые репозитории ОС не переписываются (`mirror_manage_os_repos: false`);
-* инструменты ставит та роль, которой они нужны (`tar` — etcd,
-  `procps-ng` — keepalived, `policycoreutils-python-utils` — haproxy),
-  а не общий список пакетов;
-* всё, что всё-таки правится в общих файлах, пишется с `backup: true`
-  или через маркеры blockinfile.
+* Ansible core >= 2.15 on the control machine, Python 3 on the targets.
+* Targets: RHEL 9 and RHEL 10 (primary), Debian 12 / Ubuntu 22.04+ also
+  supported.
+* SSH access with sudo (Kerberos through IPA, see *Access*).
 
-## Соглашения
+There is no CI in the repository at the moment: run `make lint` and
+`make syntax` by hand before committing. A GitLab pipeline and a GitHub
+workflow existed in earlier commits and can be restored from git history
+when they are needed.
 
-* Версии ПО задаются один раз в `group_vars/all/main.yml` окружения.
-* Все пароли — только через `vault.yml`; в ролях лежат заведомо нерабочие
-  значения-заглушки.
-* Конфигурация кластера после первичного bootstrap хранится в DCS —
-  меняется через `patronictl edit-config`, а не переписыванием `patroni.yml`.
-* Перезапуск Patroni хендлером выключен (`patroni_allow_restart: false`),
-  чтобы правка конфига не вызвала внеплановый failover: применяется reload
-  (SIGHUP), а рестарт — отдельным плейбуком.
+## Projects
+
+| Project | Playbook | Docs |
+|---|---|---|
+| playmobile | `playbooks/playmobile.yml` | [docs/playmobile.md](docs/playmobile.md) |
+| PostgreSQL HA (Patroni) | `playbooks/patroni_cluster.yml` | [docs/patroni-cluster.md](docs/patroni-cluster.md) |
