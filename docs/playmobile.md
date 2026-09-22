@@ -12,12 +12,56 @@ App-узлы проекта: RHEL 10, Docker CE с корпоративного 
 
 Группа в инвентори — `playmobile`, файл `inventories/<env>/integration.yml`.
 
-## Запуск
+## Запуск вручную
+
+Проверено на ansible-core 2.15.13 / Python 3.9 — версии с рабочего
+терминального сервера.
+
+```bash
+kinit                                    # тикет Kerberos (IPA)
+cd /path/to/ansible                      # ОБЯЗАТЕЛЬНО: ansible.cfg берётся из CWD
+ansible --version | grep 'config file'   # должен показать .../ansible.cfg, не None
+
+# 1. связность и sudo
+ansible -i inventories/dev playmobile -m ping
+ansible -i inventories/dev playmobile -m command -a 'id' --become
+
+# 2. что именно изменится
+ansible-playbook -i inventories/dev playbooks/playmobile.yml --check --diff
+
+# 3. прогон
+ansible-playbook -i inventories/dev playbooks/playmobile.yml
+```
+
+Полезные флаги: `-K` — если sudo просит пароль, `-u <user>` — если
+удалённая учётка отличается от локальной, `--limit playm-prd-01` — один
+узел, `-vv` — подробности при разборе ошибки.
+
+То же через Makefile:
 
 ```bash
 make play ENV=dev  PLAYBOOK=playbooks/playmobile.yml CHECK=1
 make play ENV=prod PLAYBOOK=playbooks/playmobile.yml LIMIT=playm-prd-01
 ```
+
+### Что важно знать перед первым прогоном
+
+* **Коллекции не нужны.** Роль `docker` использует только модули
+  `ansible.builtin`, так что `ansible-galaxy` для этого плейбука не
+  требуется — проверено прогоном с пустым путём коллекций.
+* **`config file = None`** означает, что вы не в каталоге репозитория:
+  ansible читает `ansible.cfg` из текущего каталога. Без него не
+  подхватятся `roles_path`, `become` и настройки SSH. Ansible также
+  игнорирует `ansible.cfg` в каталоге, доступном на запись всем, —
+  проверьте права, если файл не подхватывается.
+* **`--check` на узле, где репозитория Docker ещё нет, упадёт** на шаге
+  установки: dnf в режиме проверки не видит пакет, потому что repo-файл
+  в этом режиме не записывается. Это не поломка роли — либо запускайте
+  без `--check`, либо повторите проверку после первого реального
+  прогона.
+* **Роль `common` сюда не подключена** — базовую настройку ОС на этих
+  узлах делает команда инфраструктуры (см. «Separation of duties» в
+  README).
 
 Плейбук состоит из одной роли `docker` — базовую настройку ОС на этих
 узлах делает команда инфраструктуры, поэтому роль `common` сюда не

@@ -186,7 +186,15 @@ anything that does touch a shared file keeps a backup.
 
 ## Requirements
 
-* Ansible core >= 2.15 on the control machine, Python 3 on the targets.
+* Ansible core >= 2.15 on the control machine (verified against 2.15.13
+  on Python 3.9), Python 3 on the targets.
+* `ansible.cfg` is read from the current directory, so run everything
+  from the repository root - `ansible --version` must print the config
+  file, not `None`. Ansible also ignores a config file in a
+  world-writable directory.
+* Collections are only needed by the database stack; a playbook built
+  from `ansible.builtin` modules alone (such as the docker one) runs on
+  a control node with no galaxy access.
 * Targets: RHEL 9 and RHEL 10 (primary), Debian 12 / Ubuntu 22.04+ also
   supported.
 * SSH access with sudo (Kerberos through IPA, see *Access*).
