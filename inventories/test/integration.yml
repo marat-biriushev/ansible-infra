@@ -1,9 +1,23 @@
 ---
-# Test environment: Patroni cluster "pg-test"
-#   3 x VM  : patroni + etcd + postgresql
-#   2 x VM  : haproxy + keepalived (VIP)
+# ===================================================================
+# Integration project - TEST environment
+#   docker  : application nodes (RHEL 10)
+#   patroni : PostgreSQL 18 HA cluster (3 DB nodes + 2 load balancers)
+# ===================================================================
 all:
   children:
+
+    # --- application nodes running docker -------------------------------
+    docker:
+      hosts:
+        admcn-test-app01:
+          ansible_host: 172.31.125.151
+        admcn-test-app02:
+          ansible_host: 172.31.125.152
+        admcn-test-app03:
+          ansible_host: 172.31.125.153
+        admcn-test-app04:
+          ansible_host: 172.31.125.154
 
     pg_cluster:
       children:
@@ -12,7 +26,7 @@ all:
         haproxy:
         keepalived:
 
-    # --- database nodes -------------------------------------------------
+    # --- database nodes (addresses are still placeholders) --------------
     patroni:
       hosts:
         pg-test-db-01:

@@ -1,0 +1,28 @@
+---
+# ===================================================================
+# Global variables - DEV environment
+# ===================================================================
+env_name: dev
+env_is_production: false
+
+# --- OS baseline ----------------------------------------------------
+common_timezone: Etc/UTC
+common_ntp_servers:
+  - 0.pool.ntp.org
+  - 1.pool.ntp.org
+common_manage_hosts_file: true
+manage_firewall: false            # no firewalld rules in dev
+
+# --- corporate mirror -------------------------------------------------
+mirror_base_url: "http://mirror.ipotekabank.uz"
+mirror_manage_os_repos: false
+mirror_manage_epel: false
+
+# Docker packages, confirmed layout on the mirror
+docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/"
+
+# --- networking -----------------------------------------------------
+trusted_networks:
+  - 172.31.125.0/24
+
+cluster_interface: eth0

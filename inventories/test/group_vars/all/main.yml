@@ -27,22 +27,26 @@ mirror_base_url: "http://mirror.ipotekabank.uz"
 mirror_manage_os_repos: false
 mirror_manage_epel: false
 
-# PGDG mirrored under the paths below - adjust to the layout of the
-# mirror if it differs.
-postgresql_pgdg_rhel_baseurl: >-
-  {{ mirror_base_url }}/postgresql/repos/yum/{{ postgresql_version }}/redhat/rhel-$releasever-$basearch
-postgresql_pgdg_rhel_gpgkey: "{{ mirror_base_url }}/postgresql/repos/yum/keys/PGDG-RPM-GPG-KEY-RHEL"
-postgresql_pgdg_repo_url: "{{ mirror_base_url }}/postgresql/repos/apt"
-postgresql_pgdg_key_url: "{{ mirror_base_url }}/postgresql/keys/ACCC4CF8.asc"
+# The /repos/<name>/ layout is confirmed for docker; the other paths
+# follow the same convention - check them against the mirror and adjust
+# here (the roles themselves need no change).
+docker_repo_baseurl: "{{ mirror_base_url }}/repos/docker/"
 
-# etcd release archives: <base>/etcd/v<version>/etcd-v<version>-linux-amd64.tar.gz
-etcd_download_base_url: "{{ mirror_base_url }}/etcd"
+postgresql_pgdg_rhel_baseurl: >-
+  {{ mirror_base_url }}/repos/pgdg/{{ postgresql_version }}/redhat/rhel-$releasever-$basearch
+postgresql_pgdg_rhel_gpgkey: "{{ mirror_base_url }}/repos/pgdg/keys/PGDG-RPM-GPG-KEY-RHEL"
+postgresql_pgdg_repo_url: "{{ mirror_base_url }}/repos/pgdg-apt"
+postgresql_pgdg_key_url: "{{ mirror_base_url }}/repos/pgdg-apt/ACCC4CF8.asc"
+
+# etcd release archives: <base>/v<version>/etcd-v<version>-linux-amd64.tar.gz
+etcd_download_base_url: "{{ mirror_base_url }}/repos/etcd"
 
 # --- networking -----------------------------------------------------
 # Subnets allowed to reach PostgreSQL / etcd / Patroni REST API
 trusted_networks:
   - 10.20.10.0/24
   - 10.20.20.0/24
+  - 172.31.125.0/24
 
 # Interface used for cluster traffic and for the keepalived VIP.
 # On RHEL 9/10 this is usually ens192 (VMware) or enp0sN - preflight

@@ -1,0 +1,79 @@
+---
+- name: Assert that the platform is supported
+  ansible.builtin.assert:
+    that:
+      - ansible_os_family == 'RedHat'
+    fail_msg: >-
+      The docker role currently targets the RHEL family only;
+      {{ inventory_hostname }} runs {{ ansible_distribution }}.
+
+- name: Deploy the Docker repository file
+  ansible.builtin.template:
+    src: docker.repo.j2
+    dest: "{{ docker_repo_file }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: docker_manage_repository | bool
+
+- name: Remove the packages that conflict with Docker
+  ansible.builtin.dnf:
+    name: "{{ docker_conflicting_packages }}"
+    state: absent
+  when: docker_remove_conflicting_packages | bool
+
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: "{{ docker_packages + docker_extra_packages }}"
+    state: present
+  register: docker_install
+  retries: 3
+  delay: 5
+  until: docker_install is succeeded
+
+- name: Create /etc/docker
+  ansible.builtin.file:
+    path: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy /etc/docker/daemon.json
+  ansible.builtin.template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    owner: root
+    group: root
+    mode: "0644"
+    validate: "{{ docker_daemon_json_validate | default(omit, true) }}"
+    backup: true
+  notify: Restart docker
+
+- name: Add the local accounts to the docker group
+  ansible.builtin.user:
+    name: "{{ item }}"
+    groups: docker
+    append: true
+  loop: "{{ docker_users }}"
+
+- name: Enable and start Docker
+  ansible.builtin.service:
+    name: docker
+    state: "{{ docker_service_state }}"
+    enabled: "{{ docker_service_enabled | bool }}"
+
+- name: Flush handlers so the daemon runs with the final configuration
+  ansible.builtin.meta: flush_handlers
+
+- name: Read the version and the settings the daemon is actually running with
+  ansible.builtin.command: >-
+    {% raw %}docker info --format 'server={{.ServerVersion}}
+    live-restore={{.LiveRestoreEnabled}}
+    insecure-registries={{.RegistryConfig.InsecureRegistryCIDRs}}'{% endraw %}
+  register: docker_info
+  changed_when: false
+
+- name: Show the running Docker engine
+  ansible.builtin.debug:
+    msg: "{{ inventory_hostname }}: {{ docker_info.stdout }}"

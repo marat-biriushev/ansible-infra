@@ -1,3 +1,4 @@
+# Environment to act on: dev | test | prod
 ENV ?= test
 INV  = inventories/$(ENV)
 LIMIT ?=
@@ -6,7 +7,7 @@ EXTRA ?=
 
 ANSIBLE_OPTS = -i $(INV) $(if $(LIMIT),--limit $(LIMIT),) $(if $(TAGS),--tags $(TAGS),) $(EXTRA)
 
-.PHONY: help deps lint syntax ping check patroni haproxy site switchover status
+.PHONY: help deps lint syntax ping check patroni haproxy docker site switchover status
 
 help:
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-14s\033[0m %s\n", $$1, $$2}'
@@ -29,6 +30,9 @@ check: ## Dry-run the patroni cluster playbook
 
 patroni: ## Deploy the patroni cluster
 	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_cluster.yml
+
+docker: ## Install/refresh Docker on the application nodes
+	ansible-playbook $(ANSIBLE_OPTS) playbooks/docker.yml
 
 haproxy: ## Deploy only the haproxy/keepalived layer
 	ansible-playbook $(ANSIBLE_OPTS) playbooks/patroni_cluster.yml --tags haproxy,keepalived

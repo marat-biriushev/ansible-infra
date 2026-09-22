@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  role_name: docker
+  author: infra
+  description: Docker CE from the corporate mirror with a managed daemon.json
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: EL
+      versions: ["9", "10"]
+dependencies: []

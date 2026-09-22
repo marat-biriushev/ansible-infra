@@ -1,0 +1,64 @@
+---
+# --- repository ------------------------------------------------------
+# The corporate mirror serves a flat Docker CE repository; the upstream
+# layout (download.docker.com/linux/rhel/$releasever/$basearch/stable)
+# works too - only this URL changes.
+docker_manage_repository: true
+docker_repo_name: docker-ce
+docker_repo_description: "Docker CE"
+docker_repo_baseurl: "https://download.docker.com/linux/rhel/$releasever/$basearch/stable"
+docker_repo_file: /etc/yum.repos.d/docker-ce.repo
+# Mirrored repositories often do not carry the upstream signing key;
+# set docker_repo_gpgcheck: true together with docker_repo_gpgkey once
+# the key is published on the mirror.
+docker_repo_gpgcheck: false
+docker_repo_gpgkey: ""
+docker_repo_module_hotfixes: true
+
+# --- packages --------------------------------------------------------
+docker_packages:
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+docker_extra_packages: []
+
+# RHEL ships podman and its tooling; they can stay, but leave them out
+# of the way if the host is meant to run Docker only.
+docker_remove_conflicting_packages: false
+docker_conflicting_packages:
+  - podman
+  - buildah
+  - runc
+
+# --- daemon configuration (/etc/docker/daemon.json) ------------------
+docker_log_driver: json-file
+docker_log_opts:
+  max-size: 100m
+  max-file: "3"
+docker_insecure_registries: []
+docker_live_restore: true
+docker_default_address_pools:
+  - base: 100.100.0.0/16
+    size: 24
+
+docker_daemon_config:
+  log-driver: "{{ docker_log_driver }}"
+  log-opts: "{{ docker_log_opts }}"
+  insecure-registries: "{{ docker_insecure_registries }}"
+  live-restore: "{{ docker_live_restore }}"
+  default-address-pools: "{{ docker_default_address_pools }}"
+
+# Merged over docker_daemon_config - use it for anything the variables
+# above do not cover (registry-mirrors, storage-driver, dns, ...).
+docker_daemon_extra_config: {}
+
+# dockerd refuses to start on a malformed daemon.json, so the file is
+# checked before it is written. Set to "" to skip the validation.
+docker_daemon_json_validate: "dockerd --validate --config-file %s"
+
+# --- service ---------------------------------------------------------
+docker_service_enabled: true
+docker_service_state: started
+docker_users: []                  # local accounts added to the docker group

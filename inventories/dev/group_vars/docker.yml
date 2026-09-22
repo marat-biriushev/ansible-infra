@@ -1,0 +1,18 @@
+---
+# --- Docker engine settings for the DEV environment -----------------
+docker_insecure_registries:
+  - docker-asbt.nexus.otp.ipotekabank.uz
+  - docker-proxy.nexus.otp.ipotekabank.uz
+
+docker_log_opts:
+  max-size: 100m
+  max-file: "3"
+
+docker_live_restore: true
+
+docker_default_address_pools:
+  - base: 100.100.0.0/16
+    size: 24
+
+# Local accounts to add to the "docker" group
+docker_users: []

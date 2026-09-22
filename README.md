@@ -12,11 +12,18 @@ ansible.cfg                  # настройки по умолчанию (inven
 requirements.yml             # коллекции ansible-galaxy
 Makefile                     # короткие команды: make patroni ENV=prod
 inventories/
-  test/                      # тестовое окружение
-    hosts.yml
+  dev/                       # dev-окружение
+    integration.yml          # хосты проекта integration (docker + БД)
     group_vars/
       all/main.yml           # общие переменные окружения
+      docker.yml             # настройки docker-узлов
+    host_vars/
+  test/                      # тестовое окружение
+    integration.yml
+    group_vars/
+      all/main.yml
       all/vault.yml.example  # шаблон секретов (vault.yml шифруется ansible-vault)
+      docker.yml
       patroni.yml            # параметры PostgreSQL/Patroni
       etcd.yml
       haproxy.yml
@@ -25,13 +32,15 @@ inventories/
   prod/                      # продуктивное окружение (та же раскладка)
 playbooks/
   site.yml                   # точка входа для всей инфраструктуры
-  patroni_cluster.yml        # развёртывание кластера
+  docker.yml                 # установка Docker на app-узлы
+  patroni_cluster.yml        # развёртывание кластера БД
   patroni_status.yml         # состояние кластера
   patroni_switchover.yml     # плановое переключение лидера
   patroni_rolling_restart.yml
 roles/
   mirror/                    # репозитории и pip через корпоративное зеркало
   common/                    # базовая настройка ОС
+  docker/                    # Docker CE + /etc/docker/daemon.json
   etcd/                      # etcd v3 (DCS для Patroni)
   postgresql/                # пакеты PostgreSQL 18 из PGDG
   patroni/                   # Patroni 4.1.x в venv + systemd
@@ -40,7 +49,50 @@ roles/
 docs/                        # эксплуатационная документация
 ```
 
-## Топология первого стека
+## Хосты проекта integration
+
+| Окружение | docker (app) | БД |
+|---|---|---|
+| dev  | 172.31.125.51 | — |
+| test | 172.31.125.151-154 | 3 + 2 VM (адреса-заглушки) |
+| prod | 172.31.126.51-56 | 3 + 2 VM (адреса-заглушки) |
+
+Все app-узлы — RHEL 10.2. Имена (`admcn-<env>-appNN`) взяты по образцу
+`admcn-dev-app01`; переименование не влияет ни на что, кроме читаемости —
+адрес задаётся через `ansible_host`.
+
+## Docker
+
+```bash
+make docker ENV=dev                 # один узел
+make docker ENV=prod LIMIT=admcn-prod-app01
+```
+
+Роль `docker` кладёт `/etc/yum.repos.d/docker-ce.repo` с
+`baseurl=http://mirror.ipotekabank.uz/repos/docker/`, ставит
+`docker-ce`, `docker-ce-cli`, `containerd.io`, buildx и compose-плагины и
+разворачивает `/etc/docker/daemon.json`. Файл собирается из переменных
+(`inventories/<env>/group_vars/docker.yml`), поэтому реестры и пул адресов
+меняются по окружениям без правки роли:
+
+```json
+{
+    "log-driver": "json-file",
+    "log-opts": {"max-size": "100m", "max-file": "3"},
+    "insecure-registries": ["docker-asbt.nexus.otp.ipotekabank.uz",
+                            "docker-proxy.nexus.otp.ipotekabank.uz"],
+    "live-restore": true,
+    "default-address-pools": [{"base": "100.100.0.0/16", "size": 24}]
+}
+```
+
+Перед записью файл проверяется `dockerd --validate --config-file`, старая
+версия сохраняется рядом (`backup: true`), демон перезапускается только
+при реальном изменении. `gpgcheck` для репозитория выключен
+(`docker_repo_gpgcheck: false`) — включите вместе с `docker_repo_gpgkey`,
+когда на зеркале появится ключ.
+
+## Топология стека БД
 
 | Группа       | Кол-во | Роли на узле                          |
 |--------------|--------|---------------------------------------|
@@ -111,6 +163,7 @@ ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
 
 | Что | Переменная | Путь по умолчанию |
 |---|---|---|
+| Docker CE | `docker_repo_baseurl` | `/repos/docker/` (подтверждено) |
 | PGDG для RHEL | `postgresql_pgdg_rhel_baseurl` | `/postgresql/repos/yum/18/redhat/rhel-$releasever-$basearch` |
 | PGDG для Debian | `postgresql_pgdg_repo_url` | `/postgresql/repos/apt` |
 | Архив etcd | `etcd_download_base_url` | `/etcd/v3.5.17/etcd-v3.5.17-linux-amd64.tar.gz` |
@@ -118,7 +171,8 @@ ansible-playbook -i inventories/prod playbooks/patroni_rolling_restart.yml
 | BaseOS/AppStream | `mirror_rhel_*_url` | `/rhel/$releasever/{BaseOS,AppStream}/$basearch/os` |
 | sources.list | `mirror_debian_url` | `/debian`, `/debian-security` |
 
-Пути — предположение о раскладке зеркала: если она другая, поправьте
+Подтверждён только путь docker (`/repos/<name>/`), остальные приведены к
+той же схеме, но их стоит сверить: если раскладка другая, поправьте
 переменные в `inventories/<env>/group_vars/all/main.yml`, менять роли не нужно.
 
 Базовые репозитории ОС по умолчанию **не трогаются**

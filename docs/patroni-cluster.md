@@ -110,5 +110,7 @@ psql "host=<VIP> port=5001 user=postgres" -c "select pg_is_in_recovery();"   # t
 ## Расширение репозитория
 
 Новый стек добавляется так: роль в `roles/`, плейбук в `playbooks/`,
-переменные в `inventories/<env>/group_vars/<группа>.yml`, импорт плейбука в
-`playbooks/site.yml`.
+группа хостов в `inventories/<env>/integration.yml`, переменные в
+`inventories/<env>/group_vars/<группа>.yml`, импорт плейбука в
+`playbooks/site.yml`. Так добавлен стек docker: группа `docker`,
+роль `roles/docker`, плейбук `playbooks/docker.yml`.

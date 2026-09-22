@@ -1,9 +1,27 @@
 ---
-# Production environment: Patroni cluster "pg-prod"
-#   3 x VM  : patroni + etcd + postgresql
-#   2 x VM  : haproxy + keepalived (VIP)
+# ===================================================================
+# Integration project - PROD environment
+#   docker  : application nodes (RHEL 10)
+#   patroni : PostgreSQL 18 HA cluster (3 DB nodes + 2 load balancers)
+# ===================================================================
 all:
   children:
+
+    # --- application nodes running docker -------------------------------
+    docker:
+      hosts:
+        admcn-prod-app01:
+          ansible_host: 172.31.126.51
+        admcn-prod-app02:
+          ansible_host: 172.31.126.52
+        admcn-prod-app03:
+          ansible_host: 172.31.126.53
+        admcn-prod-app04:
+          ansible_host: 172.31.126.54
+        admcn-prod-app05:
+          ansible_host: 172.31.126.55
+        admcn-prod-app06:
+          ansible_host: 172.31.126.56
 
     pg_cluster:
       children:
@@ -12,7 +30,7 @@ all:
         haproxy:
         keepalived:
 
-    # --- database nodes -------------------------------------------------
+    # --- database nodes (addresses are still placeholders) --------------
     patroni:
       hosts:
         pg-prod-db-01:

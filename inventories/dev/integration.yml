@@ -1,0 +1,17 @@
+---
+# ===================================================================
+# Integration project - DEV environment
+#   docker : application node (RHEL 10)
+#
+# There is no database stack in dev yet; add the patroni/etcd/haproxy/
+# keepalived groups here (same layout as inventories/test) when it is
+# needed and copy the credentials block into group_vars/all/main.yml.
+# ===================================================================
+all:
+  children:
+
+    # --- application nodes running docker -------------------------------
+    docker:
+      hosts:
+        admcn-dev-app01:
+          ansible_host: 172.31.125.51
