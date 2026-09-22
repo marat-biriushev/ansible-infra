@@ -4,8 +4,13 @@ INV  = inventories/$(ENV)
 LIMIT ?=
 TAGS ?=
 EXTRA ?=
+# ASK=1 prompts for the SSH and the sudo password (-k needs sshpass, or
+# use CONNECTION=paramiko); CONNECTION overrides the connection plugin.
+ASK ?=
+CONNECTION ?=
 
-ANSIBLE_OPTS = -i $(INV) $(if $(LIMIT),--limit $(LIMIT),) $(if $(TAGS),--tags $(TAGS),) $(EXTRA)
+ANSIBLE_OPTS = -i $(INV) $(if $(LIMIT),--limit $(LIMIT),) $(if $(TAGS),--tags $(TAGS),) \
+               $(if $(ASK),-k -K,) $(if $(CONNECTION),-c $(CONNECTION),) $(EXTRA)
 
 .PHONY: help deps lint syntax ping play check patroni haproxy playmobile site switchover status
 

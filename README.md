@@ -64,6 +64,7 @@ make syntax ENV=test                       # --syntax-check
 make play ENV=test PLAYBOOK=playbooks/<project>.yml CHECK=1   # dry run
 make play ENV=test PLAYBOOK=playbooks/<project>.yml           # apply
 make play ENV=prod PLAYBOOK=playbooks/<project>.yml LIMIT=host1 TAGS=config
+make play ENV=dev  PLAYBOOK=playbooks/<project>.yml ASK=1     # ask for the passwords
 ```
 
 Without the Makefile it is the usual invocation:
@@ -131,18 +132,26 @@ section in `ansible.cfg`), or vendor the tarballs.
 
 ## Access
 
-Hosts are enrolled in FreeIPA, so SSH authenticates through Kerberos and
-the sudo rule comes from IPA:
+Hosts are enrolled in FreeIPA. Any of the three login methods works; the
+repository does not force one.
 
 ```bash
-kinit <your-principal>
-make ping ENV=test
+ansible -i inventories/<env> <group> -m ping -k -K   # password
+kinit && ansible -i inventories/<env> <group> -m ping  # kerberos ticket
 ```
 
-`ansible.cfg` passes `-o GSSAPIAuthentication=yes`; do not put
-`PreferredAuthentications=publickey` back, it disables Kerberos. A
-Kerberos login also needs the clock within the 5 minute skew - the
-`common` role checks that before anything is deployed.
+* **Password** (`-k`) needs `sshpass` on the control node: the `ssh`
+  connection plugin shells out to it and, without it, fails with
+  `No such file or directory: b'sshpass'`, which does not say what is
+  missing. Install it from EPEL, or use the `paramiko` connection plugin
+  (`pip install paramiko`, then `-c paramiko`), which handles the
+  password itself but has no connection multiplexing and is slower.
+* **Key or Kerberos** needs nothing extra. `ansible.cfg` passes
+  `-o GSSAPIAuthentication=yes`; do not put
+  `PreferredAuthentications=publickey` back, it disables Kerberos. A
+  Kerberos login also needs the clock within the 5 minute skew - the
+  `common` role checks that before anything is deployed.
+* **sudo**: `-K` when the rule (from IPA or local) asks for a password.
 
 Per-environment settings that depend on how IPA is configured
 (`ansible_user`, `ansible_become_password` when the sudo rule is not

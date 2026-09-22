@@ -18,24 +18,60 @@ App-узлы проекта: RHEL 10, Docker CE с корпоративного 
 терминального сервера.
 
 ```bash
-kinit                                    # тикет Kerberos (IPA)
 cd /path/to/ansible                      # ОБЯЗАТЕЛЬНО: ansible.cfg берётся из CWD
 ansible --version | grep 'config file'   # должен показать .../ansible.cfg, не None
 
-# 1. связность и sudo
-ansible -i inventories/dev playmobile -m ping
-ansible -i inventories/dev playmobile -m command -a 'id' --become
+# 1. связность и sudo (-k спросит пароль SSH, -K — пароль sudo)
+ansible -i inventories/dev playmobile -m ping -k -K
+ansible -i inventories/dev playmobile -m command -a 'id' -k -K --become
 
 # 2. что именно изменится
-ansible-playbook -i inventories/dev playbooks/playmobile.yml --check --diff
+ansible-playbook -i inventories/dev playbooks/playmobile.yml -k -K --check --diff
 
 # 3. прогон
-ansible-playbook -i inventories/dev playbooks/playmobile.yml
+ansible-playbook -i inventories/dev playbooks/playmobile.yml -k -K
 ```
 
-Полезные флаги: `-K` — если sudo просит пароль, `-u <user>` — если
-удалённая учётка отличается от локальной, `--limit playm-prd-01` — один
-узел, `-vv` — подробности при разборе ошибки.
+Пароль спрашивается один раз и переиспользуется для всех хостов группы.
+Полезные флаги: `-u <user>` — если удалённая учётка отличается от
+локальной, `--limit playm-prd-01` — один узел, `-vv` — подробности при
+разборе ошибки.
+
+### Аутентификация: пароль, ключ или Kerberos
+
+Репозиторий не навязывает способ входа, но у парольного есть требование,
+о котором ansible сообщает невнятно.
+
+* **Пароль (`-k`).** Стандартный connection-плагин `ssh` не умеет сам
+  вводить пароль — он вызывает внешний `sshpass`. Если его нет:
+
+  ```
+  Unable to execute ssh command line on a controller due to:
+  [Errno 2] No such file or directory: b'sshpass'
+  ```
+
+  Ставится из EPEL: `sudo dnf install sshpass`.
+
+* **Пароль без `sshpass`.** Плагин `paramiko` вводит пароль сам
+  (библиотека Python, внешняя утилита не нужна) — он входит в
+  ansible-core:
+
+  ```bash
+  pip install paramiko          # в ваш venv, индекс с зеркала
+  ansible-playbook -c paramiko -i inventories/dev playbooks/playmobile.yml -k -K
+  ```
+
+  Минус: `paramiko` не поддерживает мультиплексирование соединений
+  (`ControlMaster`), поэтому прогон заметно медленнее.
+
+* **Ключ или Kerberos.** Работают без дополнительных пакетов: положите
+  ключ (`ssh-copy-id`) или получите тикет (`kinit`) и запускайте без
+  `-k`. `ansible.cfg` уже передаёт `-o GSSAPIAuthentication=yes`.
+  Для регулярных прогонов это предпочтительнее — не нужно вводить
+  пароль и не нужен `sshpass`.
+
+* **sudo.** `-K` нужен, если правило sudo (из IPA или локальное) требует
+  пароль. Если правило NOPASSWD — флаг можно не указывать.
 
 То же через Makefile:
 
