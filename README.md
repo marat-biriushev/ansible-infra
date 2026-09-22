@@ -258,18 +258,49 @@ ENVIRONMENT=prod PLAYBOOK=playbooks/playmobile.yml LIMIT=playm-prd-01 \
 
 | Переменная | Тип | Назначение |
 |---|---|---|
-| `SSH_PRIVATE_KEY` | File, protected | ключ deploy-пользователя |
-| `ANSIBLE_VAULT_PASSWORD_FILE` | File, protected, masked | пароль ansible-vault |
+| `KRB5_KEYTAB` | File, protected | keytab сервисного принципала IPA |
+| `KRB5_PRINCIPAL` | Variable | `svc-ansible@IPOTEKABANK.UZ` |
+| `SSH_PRIVATE_KEY` | File, protected | альтернатива IPA — обычный ключ |
+| `ANSIBLE_VAULT_PASSWORD_FILE` | File, protected | пароль ansible-vault |
 | `SSH_KNOWN_HOSTS` | Variable | если задана, включается проверка host key |
 
-И организационно: раннер должен иметь сетевой доступ по SSH до
-172.31.125.0/24 и 172.31.126.0/24 — это к сетевикам. Выпадающие списки
-в форме требуют GitLab 15.7+; на более старой версии поля просто
-вводятся руками, логика не меняется.
+Аутентификацию настраивает `ci/setup-auth.sh` (подключается через
+`.`, а не запускается): есть `KRB5_KEYTAB` — делает `kinit`, иначе
+поднимает ssh-agent с ключом, а если не задано ни то ни другое — джоба
+падает с внятным сообщением, а не с «Permission denied» из ansible.
 
-Замечание по безопасности: в `ansible.cfg` сейчас
-`host_key_checking = False`. Для контура банка лучше положить
-`SSH_KNOWN_HOSTS` и включить проверку — пайплайн это поддерживает.
+Выпадающие списки в форме требуют GitLab 15.7+; на более старой версии
+поля вводятся руками, логика та же.
+
+## Доступ через FreeIPA
+
+Узлы заведены в IPA, поэтому SSH идёт по Kerberos (GSSAPI), а правило
+sudo приезжает из IPA. Что для этого сделано и что нужно от вас:
+
+* **`ansible.cfg`.** Из `ssh_args` убран `PreferredAuthentications=publickey`
+  — он полностью блокировал GSSAPI. Теперь там
+  `-o GSSAPIAuthentication=yes -o GSSAPIDelegateCredentials=no`: есть
+  тикет — идёт Kerberos, нет — обычный ключ, оба сценария работают.
+* **Принципал.** Нужен сервисный аккаунт (например `svc-ansible`) с
+  keytab и правом sudo на нужные hostgroup'ы IPA. Keytab кладётся в
+  переменную типа File, `kinit -kt` выполняется в начале джобы, тикет
+  живёт в `$CI_PROJECT_DIR/.krb5cc` и исчезает вместе с workspace.
+* **sudo.** Если правило IPA не NOPASSWD, CI-джоба не сможет ответить на
+  запрос пароля. Либо просите NOPASSWD для этого аккаунта, либо кладите
+  `ansible_become_password` в vault — заготовка в `group_vars/all/main.yml`.
+* **Сеть и время.** Раннеру нужен доступ до KDC (88/tcp+udp, 464) и до
+  SSH-портов подсетей 172.31.125.0/24 и 172.31.126.0/24, а расхождение
+  часов больше 5 минут ломает Kerberos — проверка времени, которая уже
+  встроена в роль `common`, отловит это заранее.
+* **Host keys.** IPA публикует SSHFP-записи в DNS, поэтому вместо
+  `known_hosts` можно включить
+  `ansible_ssh_common_args: "-o VerifyHostKeyDNS=yes"` (заготовка там же)
+  и поднять `host_key_checking = True` в `ansible.cfg`. Сейчас проверка
+  выключена — это осознанный дефолт для первого запуска, но для контура
+  банка её стоит включить.
+* **Образ раннера.** Нужен клиент Kerberos: `krb5-user` (Debian) или
+  `krb5-workstation` (RHEL) плюс `openssh-client`. Быстрее собрать свой
+  образ в Nexus с ansible-core, коллекциями и krb5 внутри.
 
 ## Разделение зон ответственности
 

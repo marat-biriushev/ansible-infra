@@ -46,6 +46,8 @@ variables:
     description: "-e values, e.g. candidate=pg-prod-db-02"
 
   ANSIBLE_FORCE_COLOR: "1"
+  # Kerberos ticket lives in the job workspace and dies with it
+  KRB5CCNAME: "FILE:$CI_PROJECT_DIR/.krb5cc"
 
 stages:
   - lint
@@ -70,20 +72,9 @@ stages:
       if [ -n "$GALAXY_SERVER_URL" ]; then
         ansible-galaxy collection install -r requirements.yml -s "$GALAXY_SERVER_URL"
       fi
-    # SSH_PRIVATE_KEY is a file-type CI variable holding the deploy key
-    - |
-      command -v ssh-agent >/dev/null || {
-        apt-get update -qq && apt-get install -y -qq --no-install-recommends openssh-client
-      }
-      eval "$(ssh-agent -s)"
-      install -m 0600 "$SSH_PRIVATE_KEY" /tmp/deploy_key
-      ssh-add /tmp/deploy_key
-    - |
-      if [ -n "$SSH_KNOWN_HOSTS" ]; then
-        mkdir -p ~/.ssh && chmod 700 ~/.ssh
-        printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
-        export ANSIBLE_HOST_KEY_CHECKING=True
-      fi
+    # Kerberos (FreeIPA) when KRB5_KEYTAB is set, an ssh key otherwise.
+    # Sourced, so the ticket cache and the agent socket reach the job.
+    - . ci/setup-auth.sh
     # ANSIBLE_VAULT_PASSWORD_FILE is a file-type CI variable; ansible
     # picks it up from the environment on its own.
     #

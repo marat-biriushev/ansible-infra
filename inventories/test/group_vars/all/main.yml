@@ -49,6 +49,22 @@ patroni_pip_extra_args: >-
   --index-url {{ mirror_pypi_index_url }}
   --trusted-host {{ mirror_pypi_trusted_host }}
 
+# --- access (FreeIPA) -------------------------------------------------
+# The hosts are enrolled in IPA, so SSH authentication goes through
+# Kerberos (GSSAPI) and the sudo rule comes from IPA as well.
+# ansible.cfg already passes -o GSSAPIAuthentication=yes.
+#
+# ansible_user: svc-ansible          # the IPA account the runner uses
+#
+# If the IPA sudo rule for that account is not NOPASSWD, a CI job cannot
+# answer the prompt - either ask for a NOPASSWD rule on these host
+# groups, or put the password in the vault:
+# ansible_become_password: "{{ vault_become_password }}"
+#
+# IPA publishes SSHFP records, so host keys can be verified from DNS
+# instead of a known_hosts file:
+# ansible_ssh_common_args: "-o VerifyHostKeyDNS=yes"
+
 # --- networking -----------------------------------------------------
 # Subnets allowed to reach PostgreSQL / etcd / Patroni REST API
 trusted_networks:
